@@ -45,6 +45,7 @@ import java.util.concurrent.atomic.AtomicReference;
  */
 public class RedissonLock extends RedissonBaseLock {
 
+    // 内锁租赁时间，默认30s
     protected long internalLockLeaseTime;
 
     protected final LockPubSub pubSub;
@@ -91,14 +92,23 @@ public class RedissonLock extends RedissonBaseLock {
         lock(leaseTime, unit, true);
     }
 
+    /**
+     *
+     * @param leaseTime 租赁时间
+     * @param unit
+     * @param interruptibly 可中断
+     * @throws InterruptedException
+     */
     private void lock(long leaseTime, TimeUnit unit, boolean interruptibly) throws InterruptedException {
         long threadId = Thread.currentThread().getId();
         Long ttl = tryAcquire(-1, leaseTime, unit, threadId);
         // lock acquired
-        if (ttl == null) {
+        if (ttl == null) { // 已获得锁，直接返回
             return;
         }
 
+
+        // 以下是未获得锁处理方式
         CompletableFuture<RedissonLockEntry> future = subscribe(threadId);
         pubSub.timeout(future);
         RedissonLockEntry entry;
@@ -111,13 +121,13 @@ public class RedissonLock extends RedissonBaseLock {
         try {
             while (true) {
                 ttl = tryAcquire(-1, leaseTime, unit, threadId);
-                // lock acquired
+                // lock acquired    已获得锁
                 if (ttl == null) {
                     break;
                 }
 
                 // waiting for message
-                if (ttl >= 0) {
+                if (ttl >= 0) { // 判断当前锁失效时间
                     try {
                         entry.getLatch().tryAcquire(ttl, TimeUnit.MILLISECONDS);
                     } catch (InterruptedException e) {
@@ -176,7 +186,7 @@ public class RedissonLock extends RedissonBaseLock {
                     TimeUnit.MILLISECONDS, threadId, RedisCommands.EVAL_LONG);
         }
         CompletionStage<Long> f = ttlRemainingFuture.thenApply(ttlRemaining -> {
-            // lock acquired
+            // lock acquired   已获得锁，下面是锁失效保活
             if (ttlRemaining == null) {
                 if (leaseTime > 0) {
                     internalLockLeaseTime = unit.toMillis(leaseTime);
@@ -201,12 +211,12 @@ public class RedissonLock extends RedissonBaseLock {
                         "redis.call('pexpire', KEYS[1], ARGV[1]); " +
                         "return nil; " +
                         "end; " +
-                        "if (redis.call('hexists', KEYS[1], ARGV[2]) == 1) then " +
+                        "if (redis.call('hexists', KEYS[1], ARGV[2]) == 1) then " + // 重入判断
                         "redis.call('hincrby', KEYS[1], ARGV[2], 1); " +
                         "redis.call('pexpire', KEYS[1], ARGV[1]); " +
                         "return nil; " +
                         "end; " +
-                        "return redis.call('pttl', KEYS[1]);",
+                        "return redis.call('pttl', KEYS[1]);", // 当获取不到锁，返回锁失效时间
                 Collections.singletonList(getRawName()), unit.toMillis(leaseTime), getLockName(threadId));
     }
 

@@ -68,6 +68,27 @@ public class RedissonLockTest extends BaseConcurrentTest {
         public void run() {
             RLock lock = redissonClient.getLock(lockName);
             try {
+
+                lock.lock();
+                lock.lock(100, TimeUnit.SECONDS);
+                lock.lockAsync();
+                lock.lockAsync(Thread.currentThread().getId());
+                lock.lockAsync(100, TimeUnit.SECONDS);
+                lock.lockInterruptibly();
+                lock.lockInterruptibly(100, TimeUnit.SECONDS);
+                lock.lockAsync(Thread.currentThread().getId());
+                lock.tryLock();
+                lock.tryLock(100, -1, TimeUnit.SECONDS);
+                lock.tryLock(100, TimeUnit.SECONDS);
+                lock.tryLockAsync();
+                lock.tryLockAsync(Thread.currentThread().getId());
+                lock.tryLockAsync(100, TimeUnit.SECONDS);
+                lock.tryLockAsync(100, -1, TimeUnit.SECONDS);
+                lock.tryLockAsync(100, -1, TimeUnit.SECONDS, Thread.currentThread().getId());
+
+
+
+
                 boolean bLocked = lock.tryLock(100, -1, TimeUnit.MILLISECONDS);
                 if (bLocked) {
                     lock.unlock();
