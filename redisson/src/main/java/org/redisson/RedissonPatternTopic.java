@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2013-2021 Nikita Koksharov
+ * Copyright (c) 2013-2022 Nikita Koksharov
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,7 +27,7 @@ import org.redisson.client.protocol.pubsub.PubSubType;
 import org.redisson.command.CommandAsyncExecutor;
 import org.redisson.config.MasterSlaveServersConfig;
 import org.redisson.misc.CompletableFutureWrapper;
-import org.redisson.pubsub.AsyncSemaphore;
+import org.redisson.misc.AsyncSemaphore;
 import org.redisson.pubsub.PubSubConnectionEntry;
 import org.redisson.pubsub.PublishSubscribeService;
 
@@ -51,7 +51,7 @@ public class RedissonPatternTopic implements RPatternTopic {
     private final Codec codec;
 
     protected RedissonPatternTopic(CommandAsyncExecutor commandExecutor, String name) {
-        this(commandExecutor.getConnectionManager().getCodec(), commandExecutor, name);
+        this(commandExecutor.getServiceManager().getCfg().getCodec(), commandExecutor, name);
     }
 
     protected RedissonPatternTopic(Codec codec, CommandAsyncExecutor commandExecutor, String name) {
@@ -100,7 +100,7 @@ public class RedissonPatternTopic implements RPatternTopic {
     }
     
     protected void acquire(AsyncSemaphore semaphore) {
-        MasterSlaveServersConfig config = commandExecutor.getConnectionManager().getConfig();
+        MasterSlaveServersConfig config = commandExecutor.getServiceManager().getConfig();
         int timeout = config.getTimeout() + config.getRetryInterval() * config.getRetryAttempts();
         if (!semaphore.tryAcquire(timeout)) {
             throw new RedisTimeoutException("Remove listeners operation timeout: (" + timeout + "ms) for " + name + " topic");

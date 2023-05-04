@@ -41,6 +41,33 @@ import org.redisson.eviction.EvictionScheduler;
 public class RedissonMapCacheTest extends BaseMapTest {
 
     @Test
+    public void testFastPutExpiration() throws Exception {
+        RMapCache<String, Object> mapCache = redisson.getMapCache("testFastPutExpiration");
+        mapCache.fastPut("k1", "v1", 1, TimeUnit.SECONDS);
+        Thread.sleep(1000);
+        mapCache.fastPut("k1", "v2");
+        assertThat(mapCache.get("k1")).isEqualTo("v2");
+    }
+
+    @Test
+    public void testGetAllWithTTLOnly() throws InterruptedException {
+        RMapCache<Integer, Integer> cache = redisson.getMapCache("testGetAllWithTTLOnly");
+        cache.put(1, 2, 3, TimeUnit.SECONDS);
+        cache.put(3, 4, 1, TimeUnit.SECONDS);
+        cache.put(5, 6, 1, TimeUnit.SECONDS);
+
+        Map<Integer, Integer> map = cache.getAllWithTTLOnly(new HashSet<>(Arrays.asList(1, 3, 5)));
+        assertThat(map).containsOnlyKeys(1, 3, 5);
+        assertThat(map).containsValues(2, 4, 6);
+
+        Thread.sleep(1500);
+
+        map = cache.getAllWithTTLOnly(new HashSet<>(Arrays.asList(1, 3, 5)));
+        assertThat(map).containsOnlyKeys(1);
+        assertThat(map).containsValues(2);
+    }
+
+    @Test
     public void testGetWithTTLOnly() throws InterruptedException {
         RMapCache<Integer, Integer> cache = redisson.getMapCache("testUpdateEntryExpiration");
         cache.put(1, 2, 3, TimeUnit.SECONDS);
@@ -121,13 +148,27 @@ public class RedissonMapCacheTest extends BaseMapTest {
                                     .writeMode(WriteMode.WRITE_BEHIND);
         return redisson.getMapCache("test", options);        
     }
-    
+
+    @Override
+    protected <K, V> RMap<K, V> getWriteBehindAsyncTestMap(String name, Map<K, V> map) {
+        MapOptions<K, V> options = MapOptions.<K, V>defaults()
+                .writerAsync(createMapWriterAsync(map))
+                .writeMode(WriteMode.WRITE_BEHIND);
+        return redisson.getMapCache("test", options);
+    }
+
     @Override
     protected <K, V> RMap<K, V> getLoaderTestMap(String name, Map<K, V> map) {
         MapOptions<K, V> options = MapOptions.<K, V>defaults().loader(createMapLoader(map));
         return redisson.getMapCache("test", options);        
     }
-    
+
+    @Override
+    protected <K, V> RMap<K, V> getLoaderAsyncTestMap(String name, Map<K, V> map) {
+        MapOptions<K, V> options = MapOptions.<K, V>defaults().loaderAsync(createMapLoaderAsync(map));
+        return redisson.getMapCache("test", options);
+    }
+
     @Test
     public void testSizeInMemory() {
         Assumptions.assumeTrue(RedisRunner.getDefaultRedisServerInstance().getRedisVersion().compareTo("4.0.0") > 0);
@@ -744,34 +785,34 @@ public class RedissonMapCacheTest extends BaseMapTest {
     @Test
     public void testReplaceValueTTLIdleUpdate() throws InterruptedException {
         RMapCache<SimpleKey, SimpleValue> map = null;
-		SimpleValue val1;
-		try {
-			map = redisson.getMapCache("simple");
-			map.put(new SimpleKey("1"), new SimpleValue("2"), 2, TimeUnit.SECONDS, 1, TimeUnit.SECONDS);
+        SimpleValue val1;
+        try {
+            map = redisson.getMapCache("simple");
+            map.put(new SimpleKey("1"), new SimpleValue("2"), 2, TimeUnit.SECONDS, 1, TimeUnit.SECONDS);
 
-			Thread.sleep(750);
-		
-			// update value, would like idle timeout to be refreshed
-			SimpleValue res = map.replace(new SimpleKey("1"), new SimpleValue("3"));
-			assertThat(res).isNotNull();
+            Thread.sleep(750);
 
-			Thread.sleep(750);
+            // update value, would like idle timeout to be refreshed
+            SimpleValue res = map.replace(new SimpleKey("1"), new SimpleValue("3"));
+            assertThat(res).isNotNull();
 
-			// if idle timeout has been updated val1 will be not be null, else it will be null
-			val1 = map.get(new SimpleKey("1"));
-			assertThat(val1).isNotNull(); 
+            Thread.sleep(750);
 
-			Thread.sleep(750);
-			
-			// val1 will have expired due to TTL
-			val1 = map.get(new SimpleKey("1"));
-			assertThat(val1).isNull();
+            // if idle timeout has been updated val1 will be not be null, else it will be null
+            val1 = map.get(new SimpleKey("1"));
+            assertThat(val1).isNotNull();
 
-		} catch (Exception e) {
-			e.printStackTrace();
-		} finally {
-	        map.remove(new SimpleKey("1"));
-		}
+            Thread.sleep(750);
+
+            // val1 will have expired due to TTL
+            val1 = map.get(new SimpleKey("1"));
+            assertThat(val1).isNull();
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        } finally {
+            map.remove(new SimpleKey("1"));
+        }
     }
 
     @Test
@@ -1237,6 +1278,8 @@ public class RedissonMapCacheTest extends BaseMapTest {
         assertThat(mapCache.putIfAbsent("4", 0L, 10000L, TimeUnit.SECONDS)).isNull();
         assertThat(mapCache.addAndGet("4", 1L)).isEqualTo(1L);
         assertThat(mapCache.putIfAbsent("4", 0L)).isEqualTo(1L);
+        assertThat(mapCache.addAndGet("key", Long.MAX_VALUE-10)).isEqualTo(Long.MAX_VALUE-10);
+        assertThat(mapCache.addAndGet("key", 10L)).isEqualTo(Long.MAX_VALUE);
         Assertions.assertEquals(1L, mapCache.get("4"));
         mapCache.destroy();
         mapCache = redisson.getMapCache("test_put_if_absent_1", LongCodec.INSTANCE);

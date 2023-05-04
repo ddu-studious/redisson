@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2013-2021 Nikita Koksharov
+ * Copyright (c) 2013-2022 Nikita Koksharov
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -64,7 +64,7 @@ public class LoadBalancerManager {
         ClientConnectionsEntry entry = getEntry(address);
         if (entry != null) {
             if (connectionManager.isClusterMode()) {
-                entry.getClient().getConfig().setReadOnly(nodeType == NodeType.SLAVE && connectionManager.getConfig().getReadMode() != ReadMode.MASTER);
+                entry.getClient().getConfig().setReadOnly(nodeType == NodeType.SLAVE && connectionManager.getServiceManager().getConfig().getReadMode() != ReadMode.MASTER);
             }
             entry.setNodeType(nodeType);
         }
@@ -76,6 +76,8 @@ public class LoadBalancerManager {
 
         CompletableFuture<Void> future = CompletableFuture.allOf(slaveFuture, pubSubFuture);
         return future.thenAccept(r -> {
+            slaveConnectionPool.addEntry(entry);
+            pubSubConnectionPool.addEntry(entry);
             client2Entry.put(entry.getClient(), entry);
         });
     }
@@ -151,8 +153,6 @@ public class LoadBalancerManager {
                 if (!entry.isInitialized()) {
                     entry.setInitialized(true);
 
-                    entry.resetFirstFail();
-
                     List<CompletableFuture<Void>> futures = new ArrayList<>(2);
                     futures.add(slaveConnectionPool.initConnections(entry));
                     futures.add(pubSubConnectionPool.initConnections(entry));
@@ -160,16 +160,17 @@ public class LoadBalancerManager {
                     CompletableFuture<Void> future = CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]));
                     future.whenComplete((r, e) -> {
                         if (e != null) {
-                            log.error("Unable to unfreeze entry: " + entry, e);
+                            log.error("Unable to unfreeze entry: {}", entry, e);
                             entry.setInitialized(false);
-                            connectionManager.newTimeout(t -> {
+                            connectionManager.getServiceManager().newTimeout(t -> {
                                 unfreeze(entry, freezeReason);
                             }, 1, TimeUnit.SECONDS);
                             return;
                         }
 
-                        log.debug("Unfreezed entry: {}", entry);
+                        entry.resetFirstFail();
                         entry.setFreezeReason(null);
+                        log.debug("Unfreezed entry: {}", entry);
                     });
                     return true;
                 }
@@ -189,8 +190,6 @@ public class LoadBalancerManager {
                 if (!entry.isInitialized()) {
                     entry.setInitialized(true);
 
-                    entry.resetFirstFail();
-
                     List<CompletableFuture<Void>> futures = new ArrayList<>(2);
                     futures.add(slaveConnectionPool.initConnections(entry));
                     futures.add(pubSubConnectionPool.initConnections(entry));
@@ -198,13 +197,14 @@ public class LoadBalancerManager {
                     CompletableFuture<Void> future = CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]));
                     return future.whenComplete((r, e) -> {
                         if (e != null) {
-                            log.error("Unable to unfreeze entry: " + entry, e);
+                            log.error("Unable to unfreeze entry: {}", entry, e);
                             entry.setInitialized(false);
                             return;
                         }
 
-                        log.debug("Unfreezed entry: {}", entry);
+                        entry.resetFirstFail();
                         entry.setFreezeReason(null);
+                        log.debug("Unfreezed entry: {}", entry);
                     }).thenApply(e -> true);
                 }
             }
@@ -253,6 +253,10 @@ public class LoadBalancerManager {
         return pubSubConnectionPool.get();
     }
 
+    public CompletableFuture<RedisPubSubConnection> nextPubSubConnection(ClientConnectionsEntry entry) {
+        return pubSubConnectionPool.get(entry);
+    }
+
     public boolean contains(InetSocketAddress addr) {
         return getEntry(addr) != null;
     }
@@ -268,7 +272,7 @@ public class LoadBalancerManager {
     public ClientConnectionsEntry getEntry(RedisURI addr) {
         for (ClientConnectionsEntry entry : client2Entry.values()) {
             InetSocketAddress entryAddr = entry.getClient().getAddr();
-            if (RedisURI.compare(entryAddr, addr)) {
+            if (addr.equals(entryAddr)) {
                 return entry;
             }
         }
@@ -299,7 +303,7 @@ public class LoadBalancerManager {
         f.completeExceptionally(exception);
         return f;
     }
-    
+
     public CompletableFuture<RedisConnection> getConnection(RedisCommand<?> command, RedisClient client) {
         ClientConnectionsEntry entry = getEntry(client);
         if (entry != null) {

@@ -23,9 +23,7 @@ import org.redisson.cluster.ClusterNodeInfo;
 import org.redisson.cluster.ClusterNodeInfo.Flag;
 import org.redisson.codec.JsonJacksonCodec;
 import org.redisson.codec.SerializationCodec;
-import org.redisson.config.Config;
-import org.redisson.config.ReadMode;
-import org.redisson.config.SubscriptionMode;
+import org.redisson.config.*;
 import org.redisson.connection.CRC16;
 import org.redisson.connection.ConnectionListener;
 import org.redisson.connection.MasterSlaveConnectionManager;
@@ -83,9 +81,58 @@ public class RedissonTest extends BaseTest {
         }
 
         ex.shutdown();
-        assertThat(ex.awaitTermination(7, TimeUnit.SECONDS)).isTrue();
+        assertThat(ex.awaitTermination(8, TimeUnit.SECONDS)).isTrue();
         inst.shutdown();
     }
+
+    @Test
+    public void testResponseHandling2() throws InterruptedException {
+        Config config = new Config();
+        config.useSingleServer()
+                .setTimeout(10)
+                .setRetryAttempts(0)
+                .setConnectionPoolSize(1)
+                .setConnectionMinimumIdleSize(1)
+                .setPingConnectionInterval(0)
+                .setAddress(RedisRunner.getDefaultRedisServerBindAddressAndPort());
+
+        RedissonClient redisson = Redisson.create(config);
+
+        RBucket<String> bucket1 = redisson.getBucket("name1");
+        RBucket<String> bucket2 = redisson.getBucket("name2");
+
+        bucket1.set("val1");
+        bucket2.set("val2");
+
+        ExecutorService executor1 = Executors.newCachedThreadPool();
+        ExecutorService executor2 = Executors.newCachedThreadPool();
+
+        AtomicBoolean hasError = new AtomicBoolean();
+        for (int i = 0; i < 100000; i++) {
+            executor1.submit(() -> {
+                String get = bucket1.get();
+                if (get.equals("val2")) {
+                    hasError.set(true);
+                }
+            });
+
+            executor2.submit(() -> {
+                String get = bucket2.get();
+                if (get.equals("val1")) {
+                    hasError.set(true);
+                }
+            });
+        }
+
+        executor1.shutdown();
+        assertThat(executor1.awaitTermination(5, TimeUnit.SECONDS)).isTrue();
+        executor2.shutdown();
+        assertThat(executor2.awaitTermination(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(hasError).isFalse();
+
+        redisson.shutdown();
+    }
+
 
     @Test
     public void testResponseHandling() throws InterruptedException {
@@ -285,13 +332,23 @@ public class RedissonTest extends BaseTest {
 
             @Override
             public void onDisconnect(InetSocketAddress addr) {
+            }
+
+            @Override
+            public void onDisconnect(InetSocketAddress addr, NodeType nodeType) {
                 assertThat(addr).isEqualTo(new InetSocketAddress(p.getRedisServerBindAddress(), p.getRedisServerPort()));
+                assertThat(nodeType).isEqualTo(NodeType.MASTER);
                 disconnectCounter.incrementAndGet();
             }
 
             @Override
             public void onConnect(InetSocketAddress addr) {
+            }
+
+            @Override
+            public void onConnect(InetSocketAddress addr, NodeType nodeType) {
                 assertThat(addr).isEqualTo(new InetSocketAddress(p.getRedisServerBindAddress(), p.getRedisServerPort()));
+                assertThat(nodeType).isEqualTo(NodeType.MASTER);
                 connectCounter.incrementAndGet();
             }
         });
@@ -756,7 +813,12 @@ public class RedissonTest extends BaseTest {
                 .run();
 
         Config config = new Config();
-        config.useSingleServer().setAddress(runner.getRedisServerAddressAndPort());
+        config.useSingleServer()
+                .setConnectionMinimumIdleSize(20)
+                .setConnectionPoolSize(20)
+                .setSubscriptionConnectionMinimumIdleSize(20)
+                .setSubscriptionConnectionPoolSize(20)
+                .setAddress(runner.getRedisServerAddressAndPort());
 
         RedissonClient r = Redisson.create(config);
         
@@ -800,6 +862,33 @@ public class RedissonTest extends BaseTest {
         r.shutdown();
         Assertions.assertTrue(r.isShuttingDown());
         Assertions.assertTrue(r.isShutdown());
+    }
+
+    @Test
+    public void testCredentials() throws IOException, InterruptedException {
+        RedisProcess runner = new RedisRunner()
+                .nosave()
+                .randomDir()
+                .randomPort()
+                .requirepass("1234")
+                .run();
+
+        Config config = new Config();
+        config.useSingleServer()
+                .setCredentialsResolver(new CredentialsResolver() {
+                    @Override
+                    public CompletionStage<Credentials> resolve(InetSocketAddress address) {
+                        return CompletableFuture.completedFuture(new Credentials(null, "1234"));
+                    }
+                })
+                .setAddress(runner.getRedisServerAddressAndPort());
+        RedissonClient redisson = Redisson.create(config);
+        RBucket<String> b = redisson.getBucket("test");
+        b.set("123");
+
+        redisson.shutdown();
+        runner.stop();
+
     }
 
     @Test
@@ -1005,7 +1094,7 @@ public class RedissonTest extends BaseTest {
                 .addNodeAddress(process.getNodes().stream().findAny().get().getRedisServerAddressAndPort());
         RedissonClient redisson = Redisson.create(config);
 
-        RTimeSeries<String> t = redisson.getTimeSeries("test");
+        RTimeSeries<String, Object> t = redisson.getTimeSeries("test");
         t.add(4, "40");
         t.add(2, "20");
         t.add(1, "10", 1, TimeUnit.SECONDS);

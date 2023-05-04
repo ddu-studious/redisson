@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2013-2021 Nikita Koksharov
+ * Copyright (c) 2013-2022 Nikita Koksharov
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,10 +20,11 @@ import org.redisson.api.redisnode.*;
 import org.redisson.client.codec.Codec;
 import org.redisson.codec.JsonCodec;
 import org.redisson.command.CommandAsyncExecutor;
-import org.redisson.command.CommandSyncService;
+import org.redisson.command.CommandAsyncService;
 import org.redisson.config.Config;
 import org.redisson.config.ConfigSupport;
 import org.redisson.connection.ConnectionManager;
+import org.redisson.connection.ServiceManager;
 import org.redisson.eviction.EvictionScheduler;
 import org.redisson.liveobject.core.RedissonObjectBuilder;
 import org.redisson.redisnode.RedissonClusterNodes;
@@ -70,7 +71,7 @@ public class Redisson implements RedissonClient {
         if (config.isReferenceEnabled()) {
             objectBuilder = new RedissonObjectBuilder(this);
         }
-        commandExecutor = new CommandSyncService(connectionManager, objectBuilder);
+        commandExecutor = new CommandAsyncService(connectionManager, objectBuilder, RedissonObjectBuilder.ReferenceType.DEFAULT);
         evictionScheduler = new EvictionScheduler(commandExecutor);
         writeBehindService = new WriteBehindService(commandExecutor);
     }
@@ -85,6 +86,10 @@ public class Redisson implements RedissonClient {
 
     public ConnectionManager getConnectionManager() {
         return connectionManager;
+    }
+
+    public ServiceManager getServiceManager() {
+        return connectionManager.getServiceManager();
     }
 
     /**
@@ -156,12 +161,12 @@ public class Redisson implements RedissonClient {
     }
 
     @Override
-    public <V> RTimeSeries<V> getTimeSeries(String name) {
+    public <V, L> RTimeSeries<V, L> getTimeSeries(String name) {
         return new RedissonTimeSeries<>(evictionScheduler, commandExecutor, name);
     }
 
     @Override
-    public <V> RTimeSeries<V> getTimeSeries(String name, Codec codec) {
+    public <V, L> RTimeSeries<V, L> getTimeSeries(String name, Codec codec) {
         return new RedissonTimeSeries<>(codec, evictionScheduler, commandExecutor, name);
     }
 
@@ -173,6 +178,16 @@ public class Redisson implements RedissonClient {
     @Override
     public <K, V> RStream<K, V> getStream(String name, Codec codec) {
         return new RedissonStream<K, V>(codec, commandExecutor, name);
+    }
+
+    @Override
+    public RSearch getSearch() {
+        return new RedissonSearch(null, commandExecutor);
+    }
+
+    @Override
+    public RSearch getSearch(Codec codec) {
+        return new RedissonSearch(codec, commandExecutor);
     }
 
     @Override
@@ -358,6 +373,11 @@ public class Redisson implements RedissonClient {
     }
 
     @Override
+    public RFencedLock getFencedLock(String name) {
+        return new RedissonFencedLock(commandExecutor, name);
+    }
+
+    @Override
     public RLock getMultiLock(RLock... locks) {
         return new RedissonMultiLock(locks);
     }
@@ -409,12 +429,12 @@ public class Redisson implements RedissonClient {
 
     @Override
     public RScheduledExecutorService getExecutorService(String name) {
-        return getExecutorService(name, connectionManager.getCodec());
+        return getExecutorService(name, connectionManager.getServiceManager().getCfg().getCodec());
     }
 
     @Override
     public RScheduledExecutorService getExecutorService(String name, ExecutorOptions options) {
-        return getExecutorService(name, connectionManager.getCodec(), options);
+        return getExecutorService(name, connectionManager.getServiceManager().getCfg().getCodec(), options);
     }
 
     @Override
@@ -429,12 +449,12 @@ public class Redisson implements RedissonClient {
 
     @Override
     public RRemoteService getRemoteService() {
-        return getRemoteService("redisson_rs", connectionManager.getCodec());
+        return getRemoteService("redisson_rs", connectionManager.getServiceManager().getCfg().getCodec());
     }
 
     @Override
     public RRemoteService getRemoteService(String name) {
-        return getRemoteService(name, connectionManager.getCodec());
+        return getRemoteService(name, connectionManager.getServiceManager().getCfg().getCodec());
     }
 
     @Override
@@ -444,8 +464,8 @@ public class Redisson implements RedissonClient {
 
     @Override
     public RRemoteService getRemoteService(String name, Codec codec) {
-        String executorId = connectionManager.getId();
-        if (codec != connectionManager.getCodec()) {
+        String executorId = connectionManager.getServiceManager().getId();
+        if (codec != connectionManager.getServiceManager().getCfg().getCodec()) {
             executorId = executorId + ":" + name;
         }
         return new RedissonRemoteService(codec, name, commandExecutor, executorId, responses);
@@ -727,7 +747,7 @@ public class Redisson implements RedissonClient {
 
     @Override
     public NodesGroup<Node> getNodesGroup() {
-        return new RedisNodes<Node>(connectionManager, commandExecutor);
+        return new RedisNodes<Node>(connectionManager, connectionManager.getServiceManager(), commandExecutor);
     }
 
     @Override
@@ -735,17 +755,17 @@ public class Redisson implements RedissonClient {
         if (!connectionManager.isClusterMode()) {
             throw new IllegalStateException("Redisson is not in cluster mode!");
         }
-        return new RedisClusterNodes(connectionManager, commandExecutor);
+        return new RedisClusterNodes(connectionManager, connectionManager.getServiceManager(), commandExecutor);
     }
 
     @Override
     public boolean isShutdown() {
-        return connectionManager.isShutdown();
+        return connectionManager.getServiceManager().isShutdown();
     }
 
     @Override
     public boolean isShuttingDown() {
-        return connectionManager.isShuttingDown();
+        return connectionManager.getServiceManager().isShuttingDown();
     }
 
     @Override
@@ -791,7 +811,7 @@ public class Redisson implements RedissonClient {
 
     @Override
     public String getId() {
-        return connectionManager.getId();
+        return connectionManager.getServiceManager().getId();
     }
 
 }

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2013-2021 Nikita Koksharov
+ * Copyright (c) 2013-2022 Nikita Koksharov
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -181,7 +181,7 @@ public interface StreamAddArgs<K, V> {
      * @return arguments object
      */
     static <K, V> StreamAddArgs<K, V> entries(Map<K, V> entries) {
-        return new BaseStreamAddArgs<K, V>(entries);
+        return new StreamAddParams<K, V>(entries);
     }
 
 }

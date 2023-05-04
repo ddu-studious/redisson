@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2013-2021 Nikita Koksharov
+ * Copyright (c) 2013-2022 Nikita Koksharov
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -148,7 +148,7 @@ public interface StreamMultiReadGroupArgs {
      * @return arguments object
      */
     static StreamMultiReadGroupArgs greaterThan(StreamMessageId id, Map<String, StreamMessageId> offsets) {
-        return new BaseStreamMultiReadGroupArgs(id, offsets);
+        return new StreamMultiReadGroupParams(id, offsets);
     }
 
 }

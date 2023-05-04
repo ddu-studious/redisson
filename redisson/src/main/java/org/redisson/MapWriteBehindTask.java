@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2013-2021 Nikita Koksharov
+ * Copyright (c) 2013-2022 Nikita Koksharov
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -70,7 +70,7 @@ public class MapWriteBehindTask {
                 return;
             }
 
-            commandExecutor.getConnectionManager().getExecutor().execute(() -> {
+            commandExecutor.getServiceManager().getExecutor().execute(() -> {
                 if (task != null) {
                     processTask(addedMap, deletedKeys, task);
                     pollTask(addedMap, deletedKeys);
@@ -85,19 +85,27 @@ public class MapWriteBehindTask {
     private void flushTasks(Map<Object, Object> addedMap, List<Object> deletedKeys) {
         try {
             if (!deletedKeys.isEmpty()) {
-                options.getWriter().delete(deletedKeys);
+                if (options.getWriter() != null) {
+                    options.getWriter().delete(deletedKeys);
+                } else {
+                    options.getWriterAsync().delete(deletedKeys).toCompletableFuture().join();
+                }
                 deletedKeys.clear();
             }
         } catch (Exception exception) {
-            log.error("Unable to delete keys: " + deletedKeys, exception);
+            log.error("Unable to delete keys: {}", deletedKeys, exception);
         }
         try {
             if (!addedMap.isEmpty()) {
-                options.getWriter().write(addedMap);
+                if (options.getWriter() != null) {
+                    options.getWriter().write(addedMap);
+                } else {
+                    options.getWriterAsync().write(addedMap).toCompletableFuture().join();
+                }
                 addedMap.clear();
             }
         } catch (Exception exception) {
-            log.error("Unable to add keys: " + addedMap, exception);
+            log.error("Unable to add keys: {}", addedMap, exception);
         }
     }
 
@@ -107,12 +115,16 @@ public class MapWriteBehindTask {
                 try {
                     deletedKeys.add(key);
                     if (deletedKeys.size() == options.getWriteBehindBatchSize()) {
-                        options.getWriter().delete(deletedKeys);
+                        if (options.getWriter() != null) {
+                            options.getWriter().delete(deletedKeys);
+                        } else {
+                            options.getWriterAsync().delete(deletedKeys).toCompletableFuture().join();
+                        }
                         deletedKeys.clear();
 
                     }
                 } catch (Exception exception) {
-                    log.error("Unable to delete keys: " + deletedKeys, exception);
+                    log.error("Unable to delete keys: {}", deletedKeys, exception);
                 }
             }
         } else {
@@ -120,11 +132,15 @@ public class MapWriteBehindTask {
                 try {
                     addedMap.put(entry.getKey(), entry.getValue());
                     if (addedMap.size() == options.getWriteBehindBatchSize()) {
-                        options.getWriter().write(addedMap);
+                        if (options.getWriter() != null) {
+                            options.getWriter().write(addedMap);
+                        } else {
+                            options.getWriterAsync().write(addedMap).toCompletableFuture().join();
+                        }
                         addedMap.clear();
                     }
                 } catch (Exception exception) {
-                    log.error("Unable to add keys: " + addedMap, exception);
+                    log.error("Unable to add keys: {}", addedMap, exception);
                 }
             }
         }
@@ -135,7 +151,11 @@ public class MapWriteBehindTask {
             return;
         }
 
-        commandExecutor.getConnectionManager().newTimeout(t -> {
+        commandExecutor.getServiceManager().newTimeout(t -> {
+            if (!isStarted.get()) {
+                return;
+            }
+
             Map<Object, Object> addedMap = new LinkedHashMap<>();
             List<Object> deletedKeys = new ArrayList<>();
             pollTask(addedMap, deletedKeys);

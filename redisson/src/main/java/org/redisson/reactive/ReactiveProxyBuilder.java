@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2013-2021 Nikita Koksharov
+ * Copyright (c) 2013-2022 Nikita Koksharov
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -32,20 +32,14 @@ public class ReactiveProxyBuilder {
     public static <T> T create(CommandReactiveExecutor commandExecutor, Object instance, Class<T> clazz) {
         return create(commandExecutor, instance, null, clazz);
     }
-    
+
     public static <T> T create(CommandReactiveExecutor commandExecutor, Object instance, Object implementation, Class<T> clazz) {
         return ProxyBuilder.create(new Callback() {
             @Override
-            public Object execute(Method mm, Object instance, Method instanceMethod, Object[] args) {
-                return commandExecutor.reactive(new Callable<RFuture<Object>>() {
-                    @SuppressWarnings("unchecked")
-                    @Override
-                    public RFuture<Object> call() throws Exception {
-                        return (RFuture<Object>) mm.invoke(instance, args);
-                    }
-                });
+            public Object execute(Callable<RFuture<Object>> callable, Method instanceMethod) {
+                return commandExecutor.reactive(callable);
             }
-        }, instance, implementation, clazz);
+        }, instance, implementation, clazz, commandExecutor.getServiceManager());
     }
     
 }

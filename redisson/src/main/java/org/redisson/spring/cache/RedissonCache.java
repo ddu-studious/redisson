@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2013-2021 Nikita Koksharov
+ * Copyright (c) 2013-2022 Nikita Koksharov
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,16 +15,19 @@
  */
 package org.redisson.spring.cache;
 
-import java.lang.reflect.Constructor;
-import java.util.concurrent.Callable;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicLong;
-
+import org.redisson.api.RFuture;
 import org.redisson.api.RLock;
 import org.redisson.api.RMap;
 import org.redisson.api.RMapCache;
+import org.redisson.client.RedisException;
 import org.springframework.cache.Cache;
 import org.springframework.cache.support.SimpleValueWrapper;
+
+import java.lang.reflect.Constructor;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  *
@@ -46,6 +49,8 @@ public class RedissonCache implements Cache {
     private final AtomicLong puts = new AtomicLong();
     
     private final AtomicLong misses = new AtomicLong();
+
+    private final AtomicLong evictions = new AtomicLong();
     
     public RedissonCache(RMapCache<Object, Object> mapCache, CacheConfig config, boolean allowNullValues) {
         this(mapCache, allowNullValues);
@@ -144,12 +149,38 @@ public class RedissonCache implements Cache {
 
     @Override
     public void evict(Object key) {
-        map.fastRemove(key);
+        evictIfPresent(key);
+    }
+
+    public boolean evictIfPresent(Object key) {
+        long delta = map.fastRemove(key);
+        addCacheEvictions(delta);
+        return delta > 0;
     }
 
     @Override
     public void clear() {
         map.clear();
+    }
+
+    public boolean invalidate() {
+        return get(map.clearAsync());
+    }
+
+    private <V> V get(RFuture<V> future) {
+        if (Thread.currentThread().getName().startsWith("redisson-netty")) {
+            throw new IllegalStateException("Sync methods can't be invoked from async/rx/reactive listeners");
+        }
+
+        try {
+            return future.get();
+        } catch (InterruptedException e) {
+            future.cancel(true);
+            Thread.currentThread().interrupt();
+            throw new RedisException(e);
+        } catch (ExecutionException e) {
+            throw new RedisException(e.getCause());
+        }
     }
 
     private ValueWrapper toValueWrapper(Object value) {
@@ -238,6 +269,10 @@ public class RedissonCache implements Cache {
     long getCachePuts() {
         return puts.get();
     }
+
+    long getCacheEvictions() {
+        return evictions.get();
+    }
     
     private void addCachePut() {
         puts.incrementAndGet();
@@ -251,4 +286,7 @@ public class RedissonCache implements Cache {
         misses.incrementAndGet();
     }
 
+    private void addCacheEvictions(long delta) {
+        evictions.addAndGet(delta);
+    }
 }

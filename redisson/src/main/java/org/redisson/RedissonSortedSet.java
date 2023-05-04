@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2013-2021 Nikita Koksharov
+ * Copyright (c) 2013-2022 Nikita Koksharov
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -34,8 +34,6 @@ import java.security.MessageDigest;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 
-import static org.redisson.client.protocol.RedisCommands.EVAL_LIST_SCAN;
-
 /**
  *
  * @author Nikita Koksharov
@@ -47,7 +45,7 @@ public class RedissonSortedSet<V> extends RedissonObject implements RSortedSet<V
     public static class BinarySearchResult<V> {
 
         private V value;
-        private Integer index;
+        private int index = -1;
 
         public BinarySearchResult(V value) {
             super();
@@ -231,7 +229,7 @@ public class RedissonSortedSet<V> extends RedissonObject implements RSortedSet<V
     @Override
     public RFuture<Boolean> addAsync(final V value) {
         CompletableFuture<Boolean> promise = new CompletableFuture<>();
-        commandExecutor.getConnectionManager().getExecutor().execute(new Runnable() {
+        commandExecutor.getServiceManager().getExecutor().execute(new Runnable() {
             public void run() {
                 try {
                     boolean res = add(value);
@@ -247,7 +245,7 @@ public class RedissonSortedSet<V> extends RedissonObject implements RSortedSet<V
     @Override
     public RFuture<Boolean> removeAsync(final Object value) {
         CompletableFuture<Boolean> promise = new CompletableFuture<>();
-        commandExecutor.getConnectionManager().getExecutor().execute(new Runnable() {
+        commandExecutor.getServiceManager().getExecutor().execute(new Runnable() {
             @Override
             public void run() {
                 try {
@@ -420,7 +418,7 @@ public class RedissonSortedSet<V> extends RedissonObject implements RSortedSet<V
     }
 
     private RFuture<ScanResult<Object>> distributedScanIteratorAsync(String iteratorName, int count) {
-        return commandExecutor.evalWriteAsync(getRawName(), codec, EVAL_LIST_SCAN,
+        return commandExecutor.evalWriteAsync(getRawName(), codec, RedisCommands.EVAL_SCAN,
                 "local start_index = redis.call('get', KEYS[2]); "
                 + "if start_index ~= false then "
                     + "start_index = tonumber(start_index); "

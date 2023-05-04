@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2013-2021 Nikita Koksharov
+ * Copyright (c) 2013-2022 Nikita Koksharov
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -75,7 +75,7 @@ public class RedisNode implements RedisClusterMaster, RedisClusterSlave, RedisMa
     public RFuture<Boolean> pingAsync(long timeout, TimeUnit timeUnit) {
         RFuture<Boolean> f = commandExecutor.readAsync(client, null, RedisCommands.PING_BOOL);
         CompletionStage<Boolean> s = f.exceptionally(e -> false);
-        commandExecutor.getConnectionManager().newTimeout(t -> {
+        commandExecutor.getServiceManager().newTimeout(t -> {
             RedisTimeoutException ex = new RedisTimeoutException("Command execution timeout (" + timeUnit.toMillis(timeout) + "ms) for command: PING, Redis client: " + client);
             s.toCompletableFuture().completeExceptionally(ex);
         }, timeout, timeUnit);

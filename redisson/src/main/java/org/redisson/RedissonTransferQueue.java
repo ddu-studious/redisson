@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2013-2021 Nikita Koksharov
+ * Copyright (c) 2013-2022 Nikita Koksharov
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -193,7 +193,7 @@ public class RedissonTransferQueue<V> extends RedissonExpirable implements RTran
         long remainTime = unit.toMillis(timeout);
         long startTime = System.currentTimeMillis();
 
-        Timeout timeoutFuture = commandExecutor.getConnectionManager().newTimeout(tt -> {
+        Timeout timeoutFuture = getServiceManager().newTimeout(tt -> {
             if (!future.getAddFuture().cancel(false)) {
                 future.cancelAsync(false);
             }
@@ -250,7 +250,7 @@ public class RedissonTransferQueue<V> extends RedissonExpirable implements RTran
 
             long time = remainTime - (System.currentTimeMillis() - startTime);
             if (time > 0) {
-                commandExecutor.getConnectionManager().newTimeout(tt -> {
+                getServiceManager().newTimeout(tt -> {
                     task.run();
                 }, time, TimeUnit.MILLISECONDS);
             } else {
@@ -637,12 +637,12 @@ public class RedissonTransferQueue<V> extends RedissonExpirable implements RTran
 
     @Override
     public int subscribeOnElements(Consumer<V> consumer) {
-        return commandExecutor.getConnectionManager().getElementsSubscribeService().subscribeOnElements(this::takeAsync, consumer);
+        return getServiceManager().getElementsSubscribeService().subscribeOnElements(this::takeAsync, consumer);
     }
 
     @Override
     public void unsubscribe(int listenerId) {
-        commandExecutor.getConnectionManager().getElementsSubscribeService().unsubscribe(listenerId);
+        commandExecutor.getServiceManager().getElementsSubscribeService().unsubscribe(listenerId);
     }
 
     @Override

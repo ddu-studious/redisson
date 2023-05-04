@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2013-2021 Nikita Koksharov
+ * Copyright (c) 2013-2022 Nikita Koksharov
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,7 +15,6 @@
  */
 package org.redisson;
 
-import io.netty.buffer.ByteBufUtil;
 import io.netty.util.Timeout;
 import org.redisson.api.RFuture;
 import org.redisson.api.RReliableTopic;
@@ -34,7 +33,6 @@ import java.util.Arrays;
 import java.util.Map;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -142,15 +140,9 @@ public class RedissonReliableTopic extends RedissonExpirable implements RReliabl
                 Arrays.asList(getRawName(), getSubscribersName()), encode(message));
     }
 
-    protected String generateId() {
-        byte[] id = new byte[16];
-        ThreadLocalRandom.current().nextBytes(id);
-        return ByteBufUtil.hexDump(id);
-    }
-
     @Override
     public <M> RFuture<String> addListenerAsync(Class<M> type, MessageListener<M> listener) {
-        String id = generateId();
+        String id = getServiceManager().generateId();
         listeners.put(id, new Entry(type, listener));
 
         if (subscriberId.get() != null) {
@@ -168,7 +160,7 @@ public class RedissonReliableTopic extends RedissonExpirable implements RReliabl
                             + "redis.call('zadd', KEYS[1], value, ARGV[2]); "
                             + "redis.call('hset', KEYS[2], ARGV[2], ARGV[1]); ",
                     Arrays.asList(getSubscribersName(), getMapName(), getCounter(), getTimeout()),
-                    startId, id, System.currentTimeMillis() + commandExecutor.getConnectionManager().getCfg().getReliableTopicWatchdogTimeout());
+                    startId, id, System.currentTimeMillis() + getServiceManager().getCfg().getReliableTopicWatchdogTimeout());
             CompletionStage<String> f = addFuture.thenApply(r -> {
                 poll(id, startId);
                 return id;
@@ -194,13 +186,13 @@ public class RedissonReliableTopic extends RedissonExpirable implements RReliabl
 
                 log.error(ex.getMessage(), ex);
 
-                commandExecutor.getConnectionManager().newTimeout(task -> {
+                getServiceManager().newTimeout(task -> {
                     poll(id, startId);
                 }, 1, TimeUnit.SECONDS);
                 return;
             }
 
-            commandExecutor.getConnectionManager().getExecutor().execute(() -> {
+            getServiceManager().getExecutor().execute(() -> {
                 res.values().forEach(entry -> {
                     Object m = entry.get("m");
                     listeners.values().forEach(e -> {
@@ -225,20 +217,18 @@ public class RedissonReliableTopic extends RedissonExpirable implements RReliabl
                                 + "redis.call('hset', KEYS[3], ARGV[2], ARGV[1]); "
                             + "end; "
 
-                            + "local t = redis.call('zrange', KEYS[5], 0, 0, 'WITHSCORES'); "
-                            + "if #t == 2 and tonumber(t[2]) < tonumber(ARGV[3]) then "
-                                + "redis.call('hdel', KEYS[3], t[1]); "
-                                + "redis.call('zrem', KEYS[2], t[1]); "
-                                + "redis.call('zrem', KEYS[5], t[1]); "
+                            + "local expired = redis.call('zrangebyscore', KEYS[5], 0, tonumber(ARGV[3]) - 1); "
+                            + "for i, v in ipairs(expired) do "
+                                + "redis.call('hdel', KEYS[3], v); "
+                                + "redis.call('zrem', KEYS[2], v); "
+                                + "redis.call('zrem', KEYS[5], v); "
                             + "end; "
 
                             + "local v = redis.call('zrange', KEYS[2], 0, 0); "
                             + "local score = redis.call('hget', KEYS[3], v[1]); "
                             + "local range = redis.call('xrange', KEYS[1], score, '+'); "
-                            + "if #range == 0 then "
-                                + "redis.call('del', KEYS[1]); "
-                            + "elseif #range == 1 and range[1][1] == score then "
-                                + "redis.call('del', KEYS[1]); "
+                            + "if #range == 0 or (#range == 1 and range[1][1] == score) then "
+                                + "redis.call('xtrim', KEYS[1], 'maxlen', 0); "
                             + "else "
                                 + "redis.call('xtrim', KEYS[1], 'maxlen', #range); "
                             + "end;"
@@ -324,7 +314,7 @@ public class RedissonReliableTopic extends RedissonExpirable implements RReliabl
     }
 
     private void renewExpiration() {
-        timeoutTask = commandExecutor.getConnectionManager().newTimeout(t -> {
+        timeoutTask = getServiceManager().newTimeout(t -> {
             RFuture<Boolean> future = commandExecutor.evalWriteAsync(getRawName(), StringCodec.INSTANCE, RedisCommands.EVAL_BOOLEAN,
                    "if redis.call('zscore', KEYS[1], ARGV[2]) == false then "
                          + "return 0; "
@@ -332,10 +322,10 @@ public class RedissonReliableTopic extends RedissonExpirable implements RReliabl
                       + "redis.call('zadd', KEYS[1], ARGV[1], ARGV[2]); "
                       + "return 1; ",
                 Arrays.asList(getTimeout()),
-                System.currentTimeMillis() + commandExecutor.getConnectionManager().getCfg().getReliableTopicWatchdogTimeout(), subscriberId.get());
+                System.currentTimeMillis() + getServiceManager().getCfg().getReliableTopicWatchdogTimeout(), subscriberId.get());
             future.whenComplete((res, e) -> {
                 if (e != null) {
-                    log.error("Can't update reliable topic " + getRawName() + " expiration time", e);
+                    log.error("Can't update reliable topic {} expiration time", getRawName(), e);
                     return;
                 }
 
@@ -344,7 +334,7 @@ public class RedissonReliableTopic extends RedissonExpirable implements RReliabl
                     renewExpiration();
                 }
             });
-        }, commandExecutor.getConnectionManager().getCfg().getReliableTopicWatchdogTimeout() / 3, TimeUnit.MILLISECONDS);
+        }, getServiceManager().getCfg().getReliableTopicWatchdogTimeout() / 3, TimeUnit.MILLISECONDS);
     }
 
 

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2013-2021 Nikita Koksharov
+ * Copyright (c) 2013-2022 Nikita Koksharov
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -65,7 +65,7 @@ public class RedissonReactive implements RedissonReactiveClient {
                                WriteBehindService writeBehindService, ConcurrentMap<String, ResponseEntry> responses) {
         this.connectionManager = connectionManager;
         RedissonObjectBuilder objectBuilder = null;
-        if (connectionManager.getCfg().isReferenceEnabled()) {
+        if (connectionManager.getServiceManager().getCfg().isReferenceEnabled()) {
             objectBuilder = new RedissonObjectBuilder(this);
         }
         commandExecutor = new CommandReactiveService(connectionManager, objectBuilder);
@@ -94,6 +94,16 @@ public class RedissonReactive implements RedissonReactiveClient {
     @Override
     public <K, V> RStreamReactive<K, V> getStream(String name, Codec codec) {
         return ReactiveProxyBuilder.create(commandExecutor, new RedissonStream<K, V>(codec, commandExecutor, name), RStreamReactive.class);
+    }
+
+    @Override
+    public RSearchReactive getSearch() {
+        return getSearch(null);
+    }
+
+    @Override
+    public RSearchReactive getSearch(Codec codec) {
+        return ReactiveProxyBuilder.create(commandExecutor, new RedissonSearch(codec, commandExecutor), RSearchReactive.class);
     }
 
     @Override
@@ -154,6 +164,12 @@ public class RedissonReactive implements RedissonReactiveClient {
     public RLockReactive getSpinLock(String name, LockOptions.BackOff backOff) {
         RedissonSpinLock spinLock = new RedissonSpinLock(commandExecutor, name, backOff);
         return ReactiveProxyBuilder.create(commandExecutor, spinLock, RLockReactive.class);
+    }
+
+    @Override
+    public RFencedLockReactive getFencedLock(String name) {
+        RedissonFencedLock lock = new RedissonFencedLock(commandExecutor, name);
+        return ReactiveProxyBuilder.create(commandExecutor, lock, RFencedLockReactive.class);
     }
 
     @Override
@@ -460,17 +476,17 @@ public class RedissonReactive implements RedissonReactiveClient {
     }
 
     @Override
-    public <V> RTimeSeriesReactive<V> getTimeSeries(String name) {
-        RTimeSeries<V> timeSeries = new RedissonTimeSeries<V>(evictionScheduler, commandExecutor, name);
+    public <V, L> RTimeSeriesReactive<V, L> getTimeSeries(String name) {
+        RTimeSeries<V, L> timeSeries = new RedissonTimeSeries<V, L>(evictionScheduler, commandExecutor, name);
         return ReactiveProxyBuilder.create(commandExecutor, timeSeries,
-                new RedissonTimeSeriesReactive<V>(timeSeries, this), RTimeSeriesReactive.class);
+                new RedissonTimeSeriesReactive<V, L>(timeSeries, this), RTimeSeriesReactive.class);
     }
 
     @Override
-    public <V> RTimeSeriesReactive<V> getTimeSeries(String name, Codec codec) {
-        RTimeSeries<V> timeSeries = new RedissonTimeSeries<V>(codec, evictionScheduler, commandExecutor, name);
+    public <V, L> RTimeSeriesReactive<V, L> getTimeSeries(String name, Codec codec) {
+        RTimeSeries<V, L> timeSeries = new RedissonTimeSeries<V, L>(codec, evictionScheduler, commandExecutor, name);
         return ReactiveProxyBuilder.create(commandExecutor, timeSeries,
-                new RedissonTimeSeriesReactive<V>(timeSeries, this), RTimeSeriesReactive.class);
+                new RedissonTimeSeriesReactive<V, L>(timeSeries, this), RTimeSeriesReactive.class);
     }
 
     @Override
@@ -499,12 +515,12 @@ public class RedissonReactive implements RedissonReactiveClient {
     
     @Override
     public RRemoteService getRemoteService() {
-        return getRemoteService("redisson_rs", connectionManager.getCodec());
+        return getRemoteService("redisson_rs", connectionManager.getServiceManager().getCfg().getCodec());
     }
 
     @Override
     public RRemoteService getRemoteService(String name) {
-        return getRemoteService(name, connectionManager.getCodec());
+        return getRemoteService(name, connectionManager.getServiceManager().getCfg().getCodec());
     }
 
     @Override
@@ -514,8 +530,8 @@ public class RedissonReactive implements RedissonReactiveClient {
 
     @Override
     public RRemoteService getRemoteService(String name, Codec codec) {
-        String executorId = connectionManager.getId();
-        if (codec != connectionManager.getCodec()) {
+        String executorId = connectionManager.getServiceManager().getId();
+        if (codec != connectionManager.getServiceManager().getCfg().getCodec()) {
             executorId = executorId + ":" + name;
         }
         return new RedissonRemoteService(codec, name, commandExecutor, executorId, responses);
@@ -563,12 +579,12 @@ public class RedissonReactive implements RedissonReactiveClient {
 
     @Override
     public Config getConfig() {
-        return connectionManager.getCfg();
+        return connectionManager.getServiceManager().getCfg();
     }
 
     @Override
     public NodesGroup<Node> getNodesGroup() {
-        return new RedisNodes<Node>(connectionManager, commandExecutor);
+        return new RedisNodes<>(connectionManager, connectionManager.getServiceManager(), commandExecutor);
     }
 
     @Override
@@ -576,7 +592,7 @@ public class RedissonReactive implements RedissonReactiveClient {
         if (!connectionManager.isClusterMode()) {
             throw new IllegalStateException("Redisson not in cluster mode!");
         }
-        return new RedisNodes<ClusterNode>(connectionManager, commandExecutor);
+        return new RedisNodes<>(connectionManager, connectionManager.getServiceManager(), commandExecutor);
     }
 
     @Override
@@ -587,12 +603,12 @@ public class RedissonReactive implements RedissonReactiveClient {
 
     @Override
     public boolean isShutdown() {
-        return connectionManager.isShutdown();
+        return connectionManager.getServiceManager().isShutdown();
     }
 
     @Override
     public boolean isShuttingDown() {
-        return connectionManager.isShuttingDown();
+        return connectionManager.getServiceManager().isShuttingDown();
     }
 
     @Override
@@ -622,6 +638,22 @@ public class RedissonReactive implements RedissonReactiveClient {
         RMap<K, V> map = new RedissonMap<>(codec, commandExecutor, name, null, options, writeBehindService);
         return ReactiveProxyBuilder.create(commandExecutor, map,
                 new RedissonMapReactive<>(map, commandExecutor), RMapReactive.class);
+    }
+
+    @Override
+    public <K, V> RLocalCachedMapReactive<K, V> getLocalCachedMap(String name, LocalCachedMapOptions<K, V> options) {
+        RMap<K, V> map = new RedissonLocalCachedMap<>(commandExecutor, name,
+                                                        options, evictionScheduler, null, writeBehindService);
+        return ReactiveProxyBuilder.create(commandExecutor, map,
+                new RedissonMapReactive<>(map, commandExecutor), RLocalCachedMapReactive.class);
+    }
+
+    @Override
+    public <K, V> RLocalCachedMapReactive<K, V> getLocalCachedMap(String name, Codec codec, LocalCachedMapOptions<K, V> options) {
+        RMap<K, V> map = new RedissonLocalCachedMap<>(codec, commandExecutor, name,
+                                                        options, evictionScheduler, null, writeBehindService);
+        return ReactiveProxyBuilder.create(commandExecutor, map,
+                new RedissonMapReactive<>(map, commandExecutor), RLocalCachedMapReactive.class);
     }
 
     @Override
@@ -663,7 +695,7 @@ public class RedissonReactive implements RedissonReactiveClient {
 
     @Override
     public String getId() {
-        return commandExecutor.getConnectionManager().getId();
+        return commandExecutor.getServiceManager().getId();
     }
 
 }

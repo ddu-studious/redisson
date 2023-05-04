@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2013-2021 Nikita Koksharov
+ * Copyright (c) 2013-2022 Nikita Koksharov
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -88,14 +88,14 @@ public final class RedissonNode {
         String configPath = args[0];
         RedissonNodeFileConfig config = null;
         try {
-            config = RedissonNodeFileConfig.fromJSON(new File(configPath));
+            config = RedissonNodeFileConfig.fromYAML(new File(configPath));
         } catch (IOException e) {
             // trying next format
             try {
-                config = RedissonNodeFileConfig.fromYAML(new File(configPath));
+                config = RedissonNodeFileConfig.fromJSON(new File(configPath));
             } catch (IOException e1) {
-                log.error("Can't parse json config " + configPath, e);
-                throw new IllegalArgumentException("Can't parse yaml config " + configPath, e1);
+                e1.addSuppressed(e);
+                throw new IllegalArgumentException("Can't parse config " + configPath, e1);
             }
         }
         
@@ -170,7 +170,7 @@ public final class RedissonNode {
             CompletionStage<RedisConnection> readFuture = entry.connectionReadOp(null);
             RedisConnection readConnection = null;
             try {
-                readConnection = readFuture.toCompletableFuture().get(connectionManager.getConfig().getConnectTimeout(), TimeUnit.MILLISECONDS);
+                readConnection = readFuture.toCompletableFuture().get(connectionManager.getServiceManager().getConfig().getConnectTimeout(), TimeUnit.MILLISECONDS);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             } catch (Exception e) {
@@ -186,7 +186,7 @@ public final class RedissonNode {
             CompletionStage<RedisConnection> writeFuture = entry.connectionWriteOp(null);
             RedisConnection writeConnection = null;
             try {
-                writeConnection = writeFuture.toCompletableFuture().get(connectionManager.getConfig().getConnectTimeout(), TimeUnit.MILLISECONDS);
+                writeConnection = writeFuture.toCompletableFuture().get(connectionManager.getServiceManager().getConfig().getConnectTimeout(), TimeUnit.MILLISECONDS);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             } catch (Exception e) {

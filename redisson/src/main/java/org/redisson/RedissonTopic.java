@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2013-2021 Nikita Koksharov
+ * Copyright (c) 2013-2022 Nikita Koksharov
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -51,11 +51,11 @@ public class RedissonTopic implements RTopic {
     final Codec codec;
 
     public RedissonTopic(CommandAsyncExecutor commandExecutor, String name) {
-        this(commandExecutor.getConnectionManager().getCodec(), commandExecutor, name);
+        this(commandExecutor.getServiceManager().getCfg().getCodec(), commandExecutor, name);
     }
 
     public static RedissonTopic createRaw(CommandAsyncExecutor commandExecutor, String name) {
-        return new RedissonTopic(commandExecutor.getConnectionManager().getCodec(), commandExecutor, NameMapper.direct(), name);
+        return new RedissonTopic(commandExecutor.getServiceManager().getCfg().getCodec(), commandExecutor, NameMapper.direct(), name);
     }
 
     public static RedissonTopic createRaw(Codec codec, CommandAsyncExecutor commandExecutor, String name) {
@@ -63,7 +63,7 @@ public class RedissonTopic implements RTopic {
     }
 
     public RedissonTopic(Codec codec, CommandAsyncExecutor commandExecutor, String name) {
-        this(codec, commandExecutor, commandExecutor.getConnectionManager().getConfig().getNameMapper(), name);
+        this(codec, commandExecutor, commandExecutor.getServiceManager().getConfig().getNameMapper(), name);
     }
 
     public RedissonTopic(Codec codec, CommandAsyncExecutor commandExecutor, NameMapper nameMapper, String name) {
@@ -106,7 +106,7 @@ public class RedissonTopic implements RTopic {
 
     @Override
     public <M> int addListener(Class<M> type, MessageListener<? extends M> listener) {
-        RFuture<Integer> future = addListenerAsync(type, (MessageListener<M>) listener);
+        RFuture<Integer> future = addListenerAsync(type, listener);
         return commandExecutor.get(future.toCompletableFuture());
     }
 
@@ -117,8 +117,8 @@ public class RedissonTopic implements RTopic {
     }
 
     @Override
-    public <M> RFuture<Integer> addListenerAsync(Class<M> type, MessageListener<M> listener) {
-        PubSubMessageListener<M> pubSubListener = new PubSubMessageListener<>(type, listener, name);
+    public <M> RFuture<Integer> addListenerAsync(Class<M> type, MessageListener<? extends M> listener) {
+        PubSubMessageListener<M> pubSubListener = new PubSubMessageListener<>(type, (MessageListener<M>) listener, name);
         return addListenerAsync(pubSubListener);
     }
 
@@ -166,11 +166,7 @@ public class RedissonTopic implements RTopic {
 
     @Override
     public int countListeners() {
-        PubSubConnectionEntry entry = subscribeService.getPubSubEntry(channelName);
-        if (entry != null) {
-            return entry.countListeners(channelName);
-        }
-        return 0;
+        return subscribeService.countListeners(channelName);
     }
 
     @Override

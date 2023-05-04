@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2013-2021 Nikita Koksharov
+ * Copyright (c) 2013-2022 Nikita Koksharov
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@
 package org.redisson;
 
 import org.redisson.api.RFuture;
-import org.redisson.connection.ConnectionManager;
+import org.redisson.connection.ServiceManager;
 
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -31,10 +31,10 @@ import java.util.function.Supplier;
 public class ElementsSubscribeService {
     
     private final Map<Integer, CompletableFuture<?>> subscribeListeners = new ConcurrentHashMap<>();
-    private final ConnectionManager connectionManager;
+    private final ServiceManager serviceManager;
 
-    public ElementsSubscribeService(ConnectionManager connectionManager) {
-        this.connectionManager = connectionManager;
+    public ElementsSubscribeService(ServiceManager serviceManager) {
+        this.serviceManager = serviceManager;
     }
 
     public <V> int subscribeOnElements(Supplier<RFuture<V>> func, Consumer<V> consumer) {
@@ -65,7 +65,7 @@ public class ElementsSubscribeService {
 
         f.whenComplete((r, e) -> {
             if (e != null) {
-                connectionManager.newTimeout(t -> {
+                serviceManager.newTimeout(t -> {
                     resubscribe(func, consumer);
                 }, 1, TimeUnit.SECONDS);
                 return;

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2013-2021 Nikita Koksharov
+ * Copyright (c) 2013-2022 Nikita Koksharov
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,7 +16,6 @@
 package org.redisson;
 
 import io.netty.buffer.ByteBuf;
-import io.netty.buffer.ByteBufUtil;
 import org.redisson.api.*;
 import org.redisson.api.listener.MessageListener;
 import org.redisson.client.codec.Codec;
@@ -24,7 +23,6 @@ import org.redisson.client.codec.LongCodec;
 import org.redisson.client.codec.StringCodec;
 import org.redisson.client.protocol.RedisCommands;
 import org.redisson.command.CommandAsyncExecutor;
-import org.redisson.connection.ConnectionManager;
 import org.redisson.executor.*;
 import org.redisson.executor.params.*;
 import org.redisson.misc.CompletableFutureWrapper;
@@ -40,8 +38,6 @@ import java.lang.ref.ReferenceQueue;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.time.Duration;
-import java.time.LocalDateTime;
-import java.time.ZonedDateTime;
 import java.util.*;
 import java.util.concurrent.*;
 
@@ -60,7 +56,6 @@ public class RedissonExecutorService implements RScheduledExecutorService {
     public static final int TERMINATED_STATE = 2;
     
     private final CommandAsyncExecutor commandExecutor;
-    private final ConnectionManager connectionManager;
     private final Codec codec;
     private final Redisson redisson;
     
@@ -109,16 +104,15 @@ public class RedissonExecutorService implements RScheduledExecutorService {
         super();
         this.codec = codec;
         this.commandExecutor = commandExecutor;
-        this.connectionManager = commandExecutor.getConnectionManager();
-        this.name = commandExecutor.getConnectionManager().getConfig().getNameMapper().map(name);
+        this.name = commandExecutor.getServiceManager().getConfig().getNameMapper().map(name);
         this.redisson = redisson;
         this.queueTransferService = queueTransferService;
         this.responses = responses;
 
-        if (codec == connectionManager.getCodec()) {
-            this.executorId = connectionManager.getId();
+        if (codec == commandExecutor.getServiceManager().getCfg().getCodec()) {
+            this.executorId = commandExecutor.getServiceManager().getId();
         } else {
-            this.executorId = connectionManager.getId() + ":" + RemoteExecutorServiceAsync.class.getName() + ":" + name;
+            this.executorId = commandExecutor.getServiceManager().getId() + ":" + RemoteExecutorServiceAsync.class.getName() + ":" + name;
         }
         
         remoteService = new RedissonExecutorRemoteService(codec, name, commandExecutor, executorId, responses);
@@ -177,12 +171,6 @@ public class RedissonExecutorService implements RScheduledExecutorService {
         idGenerator = options.getIdGenerator();
     }
     
-    protected String generateActiveWorkersId() {
-        byte[] id = new byte[16];
-        ThreadLocalRandom.current().nextBytes(id);
-        return ByteBufUtil.hexDump(id);
-    }
-
     @Override
     public int getTaskCount() {
         return commandExecutor.get(getTaskCountAsync());
@@ -215,7 +203,7 @@ public class RedissonExecutorService implements RScheduledExecutorService {
 
     @Override
     public int countActiveWorkers() {
-        String id = generateActiveWorkersId();
+        String id = commandExecutor.getServiceManager().generateId();
         int subscribers = (int) workersTopic.publish(id);
         if (subscribers == 0) {
             return 0;
@@ -244,7 +232,7 @@ public class RedissonExecutorService implements RScheduledExecutorService {
             throw new IllegalArgumentException("workers amount can't be zero");
         }
         
-        QueueTransferTask task = new QueueTransferTask(connectionManager) {
+        QueueTransferTask task = new QueueTransferTask(commandExecutor.getServiceManager()) {
             @Override
             protected RTopic getTopic() {
                 return RedissonTopic.createRaw(LongCodec.INSTANCE, commandExecutor, schedulerChannelName);
@@ -263,10 +251,10 @@ public class RedissonExecutorService implements RScheduledExecutorService {
                               + "for i = 1, #expiredTaskIds, 1 do "
                                   + "local name = expiredTaskIds[i];"
                                   + "local scheduledName = expiredTaskIds[i];"
-                                  + "if string.sub(scheduledName, 1, 2) ~= 'ff' then "
-                                      + "scheduledName = 'ff' .. scheduledName; "
+                                  + "if string.sub(scheduledName, 1, 3) ~= 'ff:' then "
+                                      + "scheduledName = 'ff:' .. scheduledName; "
                                   + "else "
-                                      + "name = string.sub(name, 3, string.len(name)); "
+                                      + "name = string.sub(name, 4, string.len(name)); "
                                   + "end;"
                                       
                                   + "redis.call('zadd', KEYS[2], startTime, scheduledName);"
@@ -313,7 +301,7 @@ public class RedissonExecutorService implements RScheduledExecutorService {
             service.setTasksInjector(options.getTasksInjector());
         }
 
-        ExecutorService es = commandExecutor.getConnectionManager().getExecutor();
+        ExecutorService es = commandExecutor.getServiceManager().getExecutor();
         if (options.getExecutorService() != null) {
             es = options.getExecutorService();
         }
@@ -478,8 +466,10 @@ public class RedissonExecutorService implements RScheduledExecutorService {
     public void shutdown() {
         queueTransferService.remove(getName());
         remoteService.deregister(RemoteExecutorService.class);
-        workersTopic.removeListener(workersGroupListenerId);
-        
+        if (workersGroupListenerId != 0) {
+            workersTopic.removeListener(workersGroupListenerId);
+        }
+
         commandExecutor.get(commandExecutor.evalWriteAsync(getName(), LongCodec.INSTANCE, RedisCommands.EVAL_VOID,
                 "if redis.call('exists', KEYS[2]) == 0 then "
                      + "if redis.call('get', KEYS[1]) == '0' or redis.call('exists', KEYS[1]) == 0 then "
@@ -495,7 +485,7 @@ public class RedissonExecutorService implements RScheduledExecutorService {
 
     @Override
     public String getName() {
-        return commandExecutor.getConnectionManager().getConfig().getNameMapper().unmap(name);
+        return commandExecutor.getServiceManager().getConfig().getNameMapper().unmap(name);
     }
     
     @Override
@@ -1218,12 +1208,11 @@ public class RedissonExecutorService implements RScheduledExecutorService {
         check(task);
         ClassBody classBody = getClassBody(task);
         byte[] state = encode(task);
-        ZonedDateTime currentDate = ZonedDateTime.of(LocalDateTime.now(), cronSchedule.getZoneId());
-        ZonedDateTime startDate = cronSchedule.getExpression().nextTimeAfter(currentDate);
+        Date startDate = cronSchedule.getExpression().getNextValidTimeAfter(new Date());
         if (startDate == null) {
             throw new IllegalArgumentException("Wrong cron expression! Unable to calculate start date");
         }
-        long startTime = startDate.toInstant().toEpochMilli();
+        long startTime = startDate.getTime();
 
         String taskId = id;
         ScheduledCronExpressionParameters params = new ScheduledCronExpressionParameters(taskId);
@@ -1232,14 +1221,14 @@ public class RedissonExecutorService implements RScheduledExecutorService {
         params.setLambdaBody(classBody.getLambda());
         params.setState(state);
         params.setStartTime(startTime);
-        params.setCronExpression(cronSchedule.getExpression().getExpr());
+        params.setCronExpression(cronSchedule.getExpression().getCronExpression());
         params.setTimezone(cronSchedule.getZoneId().toString());
         params.setExecutorId(executorId);
         RemotePromise<Void> result = (RemotePromise<Void>) asyncScheduledServiceAtFixed.schedule(params).toCompletableFuture();
         addListener(result);
         RedissonScheduledFuture<Void> f = new RedissonScheduledFuture<Void>(result, startTime) {
             public long getDelay(TimeUnit unit) {
-                return unit.convert(startDate.toInstant().toEpochMilli() - System.currentTimeMillis(), TimeUnit.MILLISECONDS);
+                return unit.convert(startDate.getTime() - System.currentTimeMillis(), TimeUnit.MILLISECONDS);
             };
         };
         storeReference(f, result.getRequestId());

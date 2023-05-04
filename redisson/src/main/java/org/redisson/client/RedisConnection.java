@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2013-2021 Nikita Koksharov
+ * Copyright (c) 2013-2022 Nikita Koksharov
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -46,18 +46,22 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public class RedisConnection implements RedisCommands {
 
+    public enum Status {OPEN, CLOSED, CLOSED_IDLE}
+
     private static final Logger LOG = LoggerFactory.getLogger(RedisConnection.class);
     private static final AttributeKey<RedisConnection> CONNECTION = AttributeKey.valueOf("connection");
 
     final RedisClient redisClient;
 
     private volatile CompletableFuture<Void> fastReconnect;
-    private volatile boolean closed;
+    private volatile Status status = Status.OPEN;
     volatile Channel channel;
 
     private CompletableFuture<?> connectionPromise;
     private long lastUsageTime;
+    @Deprecated
     private Runnable connectedListener;
+    @Deprecated
     private Runnable disconnectedListener;
 
     private final AtomicInteger usage = new AtomicInteger();
@@ -69,7 +73,7 @@ public class RedisConnection implements RedisCommands {
         updateChannel(channel);
         lastUsageTime = System.nanoTime();
 
-        LOG.debug("Connection created " + redisClient);
+        LOG.debug("Connection created {}", redisClient);
     }
     
     protected RedisConnection(RedisClient redisClient) {
@@ -79,6 +83,9 @@ public class RedisConnection implements RedisCommands {
     public void fireConnected() {
         if (connectedListener != null) {
             connectedListener.run();
+        }
+        if (redisClient.getConfig().getConnectedListener() != null) {
+            redisClient.getConfig().getConnectedListener().accept(redisClient.getAddr());
         }
     }
 
@@ -94,6 +101,7 @@ public class RedisConnection implements RedisCommands {
         return usage.decrementAndGet();
     }
 
+    @Deprecated
     public void setConnectedListener(Runnable connectedListener) {
         this.connectedListener = connectedListener;
     }
@@ -102,8 +110,12 @@ public class RedisConnection implements RedisCommands {
         if (disconnectedListener != null) {
             disconnectedListener.run();
         }
+        if (redisClient.getConfig().getDisconnectedListener() != null) {
+            redisClient.getConfig().getDisconnectedListener().accept(redisClient.getAddr());
+        }
     }
 
+    @Deprecated
     public void setDisconnectedListener(Runnable disconnectedListener) {
         this.disconnectedListener = disconnectedListener;
     }
@@ -140,9 +152,9 @@ public class RedisConnection implements RedisCommands {
             }
         }
 
-        QueueCommand command = channel.attr(CommandsQueuePubSub.CURRENT_COMMAND).get();
-        if (command instanceof CommandData) {
-            return (CommandData<?, ?>) command;
+        QueueCommandHolder holder = channel.attr(CommandsQueuePubSub.CURRENT_COMMAND).get();
+        if (holder != null && holder.getCommand() instanceof CommandData) {
+            return (CommandData<?, ?>) holder.getCommand();
         }
         return null;
     }
@@ -263,12 +275,8 @@ public class RedisConnection implements RedisCommands {
         return new CommandData<>(promise, encoder, command, params);
     }
 
-    private void setClosed(boolean closed) {
-        this.closed = closed;
-    }
-
     public boolean isClosed() {
-        return closed;
+        return status != Status.OPEN;
     }
 
     public boolean isFastReconnect() {
@@ -310,8 +318,18 @@ public class RedisConnection implements RedisCommands {
         return channel;
     }
 
+    public ChannelFuture closeIdleAsync() {
+        status = Status.CLOSED_IDLE;
+        close();
+        return channel.closeFuture();
+    }
+
+    public boolean isClosedIdle() {
+        return status == Status.CLOSED_IDLE;
+    }
+
     public ChannelFuture closeAsync() {
-        setClosed(true);
+        status = Status.CLOSED;
         close();
         return channel.closeFuture();
     }

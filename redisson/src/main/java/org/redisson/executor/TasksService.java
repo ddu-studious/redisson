@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2013-2021 Nikita Koksharov
+ * Copyright (c) 2013-2022 Nikita Koksharov
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -133,7 +133,7 @@ public class TasksService extends BaseRemoteService {
 
                             + "if tonumber(ARGV[1]) > 0 then "
                                 + "redis.call('set', KEYS[7], ARGV[4]);"
-                                + "redis.call('zadd', KEYS[3], ARGV[1], 'ff' .. ARGV[2]);"
+                                + "redis.call('zadd', KEYS[3], ARGV[1], 'ff:' .. ARGV[2]);"
                                 + "local v = redis.call('zrange', KEYS[3], 0, 0); "
                                 // if new task added to queue head then publish its startTime
                                 // to all scheduler workers
@@ -157,7 +157,7 @@ public class TasksService extends BaseRemoteService {
                     "return nil;" +
                 "end;" +
 
-                "redis.call('zrem', KEYS[2], 'ff' .. ARGV[1]); "
+                "redis.call('zrem', KEYS[2], 'ff:' .. ARGV[1]); "
               + "redis.call('zrem', KEYS[8], ARGV[1]); "
               + "local task = redis.call('hget', KEYS[6], ARGV[1]); "
               + "redis.call('hdel', KEYS[6], ARGV[1]); "
@@ -217,7 +217,7 @@ public class TasksService extends BaseRemoteService {
         });
 
         removeFuture.thenAccept(r -> {
-            commandExecutor.getConnectionManager().newTimeout(timeout -> {
+            commandExecutor.getServiceManager().newTimeout(timeout -> {
                 f.complete(false);
             }, 60, TimeUnit.SECONDS);
         });
@@ -228,7 +228,7 @@ public class TasksService extends BaseRemoteService {
     private CompletableFuture<RemoteServiceCancelResponse> scheduleCancelResponseCheck(String mapName, String requestId) {
         CompletableFuture<RemoteServiceCancelResponse> cancelResponse = new CompletableFuture<>();
 
-        commandExecutor.getConnectionManager().newTimeout(timeout -> {
+        commandExecutor.getServiceManager().newTimeout(timeout -> {
             if (cancelResponse.isDone()) {
                 return;
             }

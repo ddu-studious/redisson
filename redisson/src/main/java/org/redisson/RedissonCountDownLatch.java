@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2013-2021 Nikita Koksharov
+ * Copyright (c) 2013-2022 Nikita Koksharov
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -48,7 +48,7 @@ public class RedissonCountDownLatch extends RedissonObject implements RCountDown
 
     protected RedissonCountDownLatch(CommandAsyncExecutor commandExecutor, String name) {
         super(commandExecutor, name);
-        this.id = commandExecutor.getConnectionManager().getId();
+        this.id = commandExecutor.getServiceManager().getId();
         this.pubSub = commandExecutor.getConnectionManager().getSubscribeService().getCountDownLatchPubSub();
     }
 
@@ -217,7 +217,7 @@ public class RedissonCountDownLatch extends RedissonObject implements RCountDown
             entry.addListener(listener);
 
             if (!executed.get()) {
-                Timeout timeoutFuture = commandExecutor.getConnectionManager().newTimeout(new TimerTask() {
+                Timeout timeoutFuture = commandExecutor.getServiceManager().newTimeout(new TimerTask() {
                     @Override
                     public void run(Timeout timeout) throws Exception {
                         if (entry.removeListener(listener)) {

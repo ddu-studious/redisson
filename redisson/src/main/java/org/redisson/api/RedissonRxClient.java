@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2013-2021 Nikita Koksharov
+ * Copyright (c) 2013-2022 Nikita Koksharov
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -35,22 +35,24 @@ public interface RedissonRxClient {
     /**
      * Returns time-series instance by <code>name</code>
      *
-     * @param <V> type of value
+     * @param <V> value type
+     * @param <L> label type
      * @param name - name of instance
      * @return RTimeSeries object
      */
-    <V> RTimeSeriesRx<V> getTimeSeries(String name);
+    <V, L> RTimeSeriesRx<V, L> getTimeSeries(String name);
 
     /**
      * Returns time-series instance by <code>name</code>
      * using provided <code>codec</code> for values.
      *
-     * @param <V> type of value
+     * @param <V> value type
+     * @param <L> label type
      * @param name - name of instance
      * @param codec - codec for values
      * @return RTimeSeries object
      */
-    <V> RTimeSeriesRx<V> getTimeSeries(String name, Codec codec);
+    <V, L> RTimeSeriesRx<V, L> getTimeSeries(String name, Codec codec);
 
     /**
      * Returns stream instance by <code>name</code>
@@ -77,7 +79,21 @@ public interface RedissonRxClient {
      * @return RStream object
      */
     <K, V> RStreamRx<K, V> getStream(String name, Codec codec);
-    
+
+    /**
+     * Returns API for RediSearch module
+     *
+     * @return RSearch object
+     */
+    RSearchRx getSearch();
+
+    /**
+     * Returns API for RediSearch module using defined codec for attribute values.
+     *
+     * @return RSearch object
+     */
+    RSearchRx getSearch(Codec codec);
+
     /**
      * Returns geospatial items holder instance by <code>name</code>.
      * 
@@ -188,6 +204,16 @@ public interface RedissonRxClient {
      * @return Lock object
      */
     RLockRx getSpinLock(String name, LockOptions.BackOff backOff);
+
+    /**
+     * Returns Fenced Lock by name.
+     * <p>
+     * Implements a <b>non-fair</b> locking so doesn't guarantee an acquire order by threads.
+     *
+     * @param name name of object
+     * @return Lock object
+     */
+    RFencedLockRx getFencedLock(String name);
 
     /**
      * Returns MultiLock instance associated with specified <code>locks</code>
@@ -533,6 +559,31 @@ public interface RedissonRxClient {
      * @return Map object
      */
     <K, V> RMapRx<K, V> getMap(String name, Codec codec, MapOptions<K, V> options);
+
+    /**
+     * Returns local cached map instance by name.
+     * Configured by parameters of options-object.
+     *
+     * @param <K> type of key
+     * @param <V> type of value
+     * @param name - name of object
+     * @param options - local map options
+     * @return LocalCachedMap object
+     */
+    <K, V> RLocalCachedMapRx<K, V> getLocalCachedMap(String name, LocalCachedMapOptions<K, V> options);
+
+    /**
+     * Returns local cached map instance by name
+     * using provided codec. Configured by parameters of options-object.
+     *
+     * @param <K> type of key
+     * @param <V> type of value
+     * @param name - name of object
+     * @param codec - codec for keys and values
+     * @param options - local map options
+     * @return LocalCachedMap object
+     */
+    <K, V> RLocalCachedMapRx<K, V> getLocalCachedMap(String name, Codec codec, LocalCachedMapOptions<K, V> options);
 
     /**
      * Returns set instance by name.

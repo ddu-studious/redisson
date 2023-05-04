@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2013-2021 Nikita Koksharov
+ * Copyright (c) 2013-2022 Nikita Koksharov
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -83,7 +83,7 @@ public abstract class BaseRemoteProxy {
                 Arrays.asList(ackName), optionsCopy.getAckTimeoutInMillis());
         return ackClientsFuture.thenCompose(res -> {
             if (res) {
-                return pollResponse(commandExecutor.getConnectionManager().getConfig().getTimeout(), requestId, true);
+                return pollResponse(commandExecutor.getServiceManager().getConfig().getTimeout(), requestId, true);
             }
             return CompletableFuture.completedFuture(null);
         });
@@ -121,7 +121,7 @@ public abstract class BaseRemoteProxy {
     }
 
     private <T extends RRemoteServiceResponse> ScheduledFuture<?> createResponseTimeout(long timeout, String requestId, CompletableFuture<T> responseFuture) {
-        return commandExecutor.getConnectionManager().getGroup().schedule(new Runnable() {
+        return commandExecutor.getServiceManager().getGroup().schedule(new Runnable() {
                     @Override
                     public void run() {
                         synchronized (responses) {
@@ -192,7 +192,7 @@ public abstract class BaseRemoteProxy {
                     return;
                 }
 
-                log.error("Can't get response from " + responseQueueName, e);
+                log.error("Can't get response from {}", responseQueueName, e);
                 return;
             }
 

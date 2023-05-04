@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2013-2021 Nikita Koksharov
+ * Copyright (c) 2013-2022 Nikita Koksharov
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,7 +19,10 @@ import io.reactivex.rxjava3.core.Completable;
 import io.reactivex.rxjava3.core.Maybe;
 import io.reactivex.rxjava3.core.Single;
 import org.redisson.api.map.MapLoader;
+import org.redisson.api.map.event.MapEntryListener;
 
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -275,6 +278,20 @@ public interface RMapCacheRx<K, V> extends RMapRx<K, V>, RDestroyable {
     Maybe<V> getWithTTLOnly(K key);
 
     /**
+     * Returns map slice contained the mappings with defined <code>keys</code>.
+     * <p>
+     * If map doesn't contain value/values for specified key/keys and {@link MapLoader} is defined
+     * then value/values will be loaded in read-through mode.
+     * <p>
+     * NOTE: Idle time of entry is not taken into account.
+     * Entry last access time isn't modified if map limited by size.
+     *
+     * @param keys map keys
+     * @return Map slice
+     */
+    Single<Map<K, V>> getAllWithTTLOnly(Set<K> keys);
+
+    /**
      * Returns the number of entries in cache.
      * This number can reflects expired entries too
      * due to non realtime cleanup process.
@@ -292,5 +309,18 @@ public interface RMapCacheRx<K, V> extends RMapRx<K, V>, RDestroyable {
      *          -1 if the key exists but has no associated expire.
      */
     Single<Long> remainTimeToLive(K key);
+
+    /**
+     * Adds map entry listener
+     *
+     * @see org.redisson.api.map.event.EntryCreatedListener
+     * @see org.redisson.api.map.event.EntryUpdatedListener
+     * @see org.redisson.api.map.event.EntryRemovedListener
+     * @see org.redisson.api.map.event.EntryExpiredListener
+     *
+     * @param listener - entry listener
+     * @return listener id
+     */
+    Single<Integer> addListener(MapEntryListener listener);
 
 }

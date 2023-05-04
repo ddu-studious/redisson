@@ -28,8 +28,10 @@ Add `RedissonSessionManager` in global context - `tomcat/conf/context.xml` or pe
    `broadcastSessionUpdates` - if `true` and `readMode=MEMORY` then session updates are broadcasted across all Tomcat instances. Default is `true`.
 
    `updateMode` - Session attributes update mode. Two modes are available:
-   * `DEFAULT` - session attributes are stored into Redis only through `Session.setAttribute` method. Default mode.
-   * `AFTER_REQUEST` - all session attributes are stored into Redis after each request. It useful in case when some objects stored in session change own state without `Session.setAttribute` method execution.
+   * `DEFAULT` - session attributes are stored into Redis only through the `Session.setAttribute` method. Default mode.
+   * `AFTER_REQUEST`
+       * In `readMode=REDIS` all changes of session attributes made through the `Session.setAttribute` method are accumulated in memory and stored into Redis only after the end of the request. 
+       * In `readMode=MEMORY` all session attributes are always stored into Redis after the end of the request regardless of the `Session.setAttribute` method invocation. It is useful in case when some objects stored in session change their own state without `Session.setAttribute` method execution.
    <br/>
 
    `configPath` - path to Redisson YAML config. See [configuration wiki page](https://github.com/redisson/redisson/wiki/2.-Configuration) for more details.
@@ -65,14 +67,14 @@ Amount of Redisson instances created by Tomcat for multiple contexts could be re
 ### 2. Copy two jars into `TOMCAT_BASE/lib` directory:
 
   
-[redisson-all-3.17.4.jar](https://repository.sonatype.org/service/local/artifact/maven/redirect?r=central-proxy&g=org.redisson&a=redisson-all&v=3.17.4&e=jar)
+[redisson-all-3.21.0.jar](https://repository.sonatype.org/service/local/artifact/maven/redirect?r=central-proxy&g=org.redisson&a=redisson-all&v=3.21.0&e=jar)
   
-Tomcat 7.x - [redisson-tomcat-7-3.17.4.jar](https://repository.sonatype.org/service/local/artifact/maven/redirect?r=central-proxy&g=org.redisson&a=redisson-tomcat-7&v=3.17.4&e=jar)  
+Tomcat 7.x - [redisson-tomcat-7-3.21.0.jar](https://repository.sonatype.org/service/local/artifact/maven/redirect?r=central-proxy&g=org.redisson&a=redisson-tomcat-7&v=3.21.0&e=jar)  
 
-Tomcat 8.x - [redisson-tomcat-8-3.17.4.jar](https://repository.sonatype.org/service/local/artifact/maven/redirect?r=central-proxy&g=org.redisson&a=redisson-tomcat-8&v=3.17.4&e=jar)  
+Tomcat 8.x - [redisson-tomcat-8-3.21.0.jar](https://repository.sonatype.org/service/local/artifact/maven/redirect?r=central-proxy&g=org.redisson&a=redisson-tomcat-8&v=3.21.0&e=jar)  
 
-Tomcat 9.x - [redisson-tomcat-9-3.17.4.jar](https://repository.sonatype.org/service/local/artifact/maven/redirect?r=central-proxy&g=org.redisson&a=redisson-tomcat-9&v=3.17.4&e=jar)  
+Tomcat 9.x - [redisson-tomcat-9-3.21.0.jar](https://repository.sonatype.org/service/local/artifact/maven/redirect?r=central-proxy&g=org.redisson&a=redisson-tomcat-9&v=3.21.0&e=jar)  
 
-Tomcat 10.x - [redisson-tomcat-10-3.17.4.jar](https://repository.sonatype.org/service/local/artifact/maven/redirect?r=central-proxy&g=org.redisson&a=redisson-tomcat-10&v=3.17.4&e=jar)  
+Tomcat 10.x - [redisson-tomcat-10-3.21.0.jar](https://repository.sonatype.org/service/local/artifact/maven/redirect?r=central-proxy&g=org.redisson&a=redisson-tomcat-10&v=3.21.0&e=jar)  
 
 Try __[Redisson PRO](https://redisson.pro)__ with **ultra-fast performance** and **support by SLA**.

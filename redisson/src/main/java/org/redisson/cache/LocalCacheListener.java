@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2013-2021 Nikita Koksharov
+ * Copyright (c) 2013-2022 Nikita Koksharov
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,6 +25,8 @@ import org.redisson.api.LocalCachedMapOptions.EvictionPolicy;
 import org.redisson.api.LocalCachedMapOptions.ReconnectionStrategy;
 import org.redisson.api.LocalCachedMapOptions.SyncStrategy;
 import org.redisson.api.listener.BaseStatusListener;
+import org.redisson.api.listener.LocalCacheInvalidateListener;
+import org.redisson.api.listener.LocalCacheUpdateListener;
 import org.redisson.api.listener.MessageListener;
 import org.redisson.client.codec.ByteArrayCodec;
 import org.redisson.client.codec.Codec;
@@ -34,6 +36,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.*;
 
@@ -54,9 +57,9 @@ public abstract class LocalCacheListener {
     
     private String name;
     private CommandAsyncExecutor commandExecutor;
-    private Map<?, ?> cache;
+    private Map<CacheKey, ? extends CacheValue> cache;
     private RObject object;
-    private byte[] instanceId = new byte[16];
+    private byte[] instanceId;
     private Codec codec;
     private LocalCachedMapOptions<?, ?> options;
     
@@ -65,7 +68,11 @@ public abstract class LocalCacheListener {
     private RTopic invalidationTopic;
     private int syncListenerId;
     private int reconnectionListenerId;
-    
+
+    private final Map<Integer, LocalCacheInvalidateListener<?, ?>> invalidateListeners = new ConcurrentHashMap<>();
+
+    private final Map<Integer, LocalCacheUpdateListener<?, ?>> updateListeners = new ConcurrentHashMap<>();
+
     public LocalCacheListener(String name, CommandAsyncExecutor commandExecutor,
             RObject object, Codec codec, LocalCachedMapOptions<?, ?> options, long cacheUpdateLogTime) {
         super();
@@ -75,14 +82,8 @@ public abstract class LocalCacheListener {
         this.codec = codec;
         this.options = options;
         this.cacheUpdateLogTime = cacheUpdateLogTime;
-        
-        ThreadLocalRandom.current().nextBytes(instanceId);
-    }
-    
-    public byte[] generateId() {
-        byte[] id = new byte[16];
-        ThreadLocalRandom.current().nextBytes(id);
-        return id;
+
+        instanceId = commandExecutor.getServiceManager().generateIdArray();
     }
     
     public byte[] getInstanceId() {
@@ -132,7 +133,7 @@ public abstract class LocalCacheListener {
         return disabledKeys.containsKey(key);
     }
     
-    public void add(Map<?, ?> cache) {
+    public void add(Map<CacheKey, ? extends CacheValue> cache) {
         this.cache = cache;
         
         invalidationTopic = RedissonTopic.createRaw(LocalCachedMessageCodec.INSTANCE, commandExecutor, getInvalidationTopicName());
@@ -199,7 +200,8 @@ public abstract class LocalCacheListener {
                         if (!Arrays.equals(invalidateMsg.getExcludedId(), instanceId)) {
                             for (byte[] keyHash : invalidateMsg.getKeyHashes()) {
                                 CacheKey key = new CacheKey(keyHash);
-                                cache.remove(key);
+                                CacheValue value = cache.remove(key);
+                                notifyInvalidate(value);
                             }
                         }
                     }
@@ -212,7 +214,8 @@ public abstract class LocalCacheListener {
                                 ByteBuf keyBuf = Unpooled.wrappedBuffer(entry.getKey());
                                 ByteBuf valueBuf = Unpooled.wrappedBuffer(entry.getValue());
                                 try {
-                                    updateCache(keyBuf, valueBuf);
+                                    CacheValue value = updateCache(keyBuf, valueBuf);
+                                    notifyUpdate(value);
                                 } catch (IOException e) {
                                     log.error("Can't decode map entry", e);
                                 } finally {
@@ -244,14 +247,26 @@ public abstract class LocalCacheListener {
             }
         }
     }
-    
+
+    public void notifyUpdate(CacheValue value) {
+        for (LocalCacheUpdateListener listener : updateListeners.values()) {
+            listener.onUpdate(value.getKey(), value.getValue());
+        }
+    }
+
+    public void notifyInvalidate(CacheValue value) {
+        for (LocalCacheInvalidateListener listener : invalidateListeners.values()) {
+            listener.onInvalidate(value.getKey(), value.getValue());
+        }
+    }
+
     public RFuture<Void> clearLocalCacheAsync() {
         cache.clear();
         if (syncListenerId == 0) {
             return new CompletableFutureWrapper<>((Void) null);
         }
 
-        byte[] id = generateId();
+        byte[] id = commandExecutor.getServiceManager().generateIdArray();
         RFuture<Long> future = invalidationTopic.publishAsync(new LocalCachedMapClear(instanceId, id, true));
         CompletionStage<Void> f = future.thenCompose(res -> {
             if (res.intValue() == 0) {
@@ -275,7 +290,7 @@ public abstract class LocalCacheListener {
         return RedissonObject.suffixName(name, TOPIC_SUFFIX);
     }
 
-    protected abstract void updateCache(ByteBuf keyBuf, ByteBuf valueBuf) throws IOException;
+    protected abstract CacheValue updateCache(ByteBuf keyBuf, ByteBuf valueBuf) throws IOException;
     
     private void disableKeys(final String requestId, final Set<CacheKey> keys, long timeout) {
         for (CacheKey key : keys) {
@@ -283,7 +298,7 @@ public abstract class LocalCacheListener {
             cache.remove(key);
         }
         
-        commandExecutor.getConnectionManager().getGroup().schedule(new Runnable() {
+        commandExecutor.getServiceManager().getGroup().schedule(new Runnable() {
             @Override
             public void run() {
                 for (CacheKey cacheKey : keys) {
@@ -345,7 +360,25 @@ public abstract class LocalCacheListener {
     private RSemaphore getClearSemaphore(byte[] requestId) {
         String id = ByteBufUtil.hexDump(requestId);
         RSemaphore semaphore = new RedissonSemaphore(commandExecutor, name + ":clear:" + id);
+        semaphore.expireAsync(Duration.ofSeconds(60));
         return semaphore;
+    }
+
+    public <K, V> int addListener(LocalCacheInvalidateListener<K, V> listener) {
+        int listenerId = System.identityHashCode(listener);
+        invalidateListeners.put(listenerId, listener);
+        return listenerId;
+    }
+
+    public <K, V> int addListener(LocalCacheUpdateListener<K, V> listener) {
+        int listenerId = System.identityHashCode(listener);
+        updateListeners.put(listenerId, listener);
+        return listenerId;
+    }
+
+    public void removeListener(int listenerId) {
+        updateListeners.remove(listenerId);
+        invalidateListeners.remove(listenerId);
     }
 
 }

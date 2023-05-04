@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2013-2021 Nikita Koksharov
+ * Copyright (c) 2013-2022 Nikita Koksharov
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -48,13 +48,13 @@ abstract class EvictionTask implements Runnable {
     EvictionTask(CommandAsyncExecutor executor) {
         super();
         this.executor = executor;
-        this.minDelay = executor.getConnectionManager().getCfg().getMinCleanUpDelay();
-        this.maxDelay = executor.getConnectionManager().getCfg().getMaxCleanUpDelay();
-        this.keysLimit = executor.getConnectionManager().getCfg().getCleanUpKeysAmount();
+        this.minDelay = executor.getServiceManager().getCfg().getMinCleanUpDelay();
+        this.maxDelay = executor.getServiceManager().getCfg().getMaxCleanUpDelay();
+        this.keysLimit = executor.getServiceManager().getCfg().getCleanUpKeysAmount();
     }
 
     public void schedule() {
-        scheduledFuture = executor.getConnectionManager().getGroup().schedule(this, delay, TimeUnit.SECONDS);
+        scheduledFuture = executor.getServiceManager().getGroup().schedule(this, delay, TimeUnit.SECONDS);
     }
 
     public ScheduledFuture<?> getScheduledFuture() {
@@ -67,14 +67,14 @@ abstract class EvictionTask implements Runnable {
     
     @Override
     public void run() {
-        if (executor.getConnectionManager().isShuttingDown()) {
+        if (executor.getServiceManager().isShuttingDown()) {
             return;
         }
         
         RFuture<Integer> future = execute();
         future.whenComplete((size, e) -> {
             if (e != null) {
-                log.error("Unable to evict elements for '" + getName() + "'", e);
+                log.error("Unable to evict elements for '{}'", getName(), e);
                 schedule();
                 return;
             }

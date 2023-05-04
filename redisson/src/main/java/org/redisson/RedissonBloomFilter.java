@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2013-2021 Nikita Koksharov
+ * Copyright (c) 2013-2022 Nikita Koksharov
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -187,7 +187,7 @@ public class RedissonBloomFilter<T> extends RedissonExpirable implements RBloomF
     }
 
     protected RBitSetAsync createBitSet(CommandBatchService executorService) {
-        return new RedissonBitSet(executorService, getRawName());
+        return new RedissonBitSet(executorService, getName());
     }
 
     private void addConfigCheck(int hashIterations, long size, CommandBatchService executorService) {

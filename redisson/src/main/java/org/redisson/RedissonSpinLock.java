@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2013-2021 Nikita Koksharov
+ * Copyright (c) 2013-2022 Nikita Koksharov
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,7 +17,6 @@ package org.redisson;
 
 import org.redisson.api.LockOptions;
 import org.redisson.api.RFuture;
-import org.redisson.client.RedisException;
 import org.redisson.client.codec.LongCodec;
 import org.redisson.client.protocol.RedisCommands;
 import org.redisson.client.protocol.RedisStrictCommand;
@@ -53,7 +52,7 @@ public class RedissonSpinLock extends RedissonBaseLock {
                             LockOptions.BackOff backOff) {
         super(commandExecutor, name);
         this.commandExecutor = commandExecutor;
-        this.internalLockLeaseTime = commandExecutor.getConnectionManager().getCfg().getLockWatchdogTimeout();
+        this.internalLockLeaseTime = getServiceManager().getCfg().getLockWatchdogTimeout();
         this.backOff = backOff;
     }
 
@@ -102,10 +101,16 @@ public class RedissonSpinLock extends RedissonBaseLock {
 
     private <T> RFuture<Long> tryAcquireAsync(long leaseTime, TimeUnit unit, long threadId) {
         if (leaseTime > 0) {
-            return tryLockInnerAsync(leaseTime, unit, threadId, RedisCommands.EVAL_LONG);
+            RFuture<Long> acquiredFuture = tryLockInnerAsync(leaseTime, unit, threadId, RedisCommands.EVAL_LONG);
+            CompletionStage<Long> s = handleNoSync(threadId, acquiredFuture);
+            return new CompletableFutureWrapper<>(s);
         }
         RFuture<Long> ttlRemainingFuture = tryLockInnerAsync(internalLockLeaseTime,
                 TimeUnit.MILLISECONDS, threadId, RedisCommands.EVAL_LONG);
+
+        CompletionStage<Long> s = handleNoSync(threadId, ttlRemainingFuture);
+        ttlRemainingFuture = new CompletableFutureWrapper<>(s);
+
         ttlRemainingFuture.thenAccept(ttlRemaining -> {
             // lock acquired
             if (ttlRemaining == null) {
@@ -123,7 +128,7 @@ public class RedissonSpinLock extends RedissonBaseLock {
     <T> RFuture<T> tryLockInnerAsync(long leaseTime, TimeUnit unit, long threadId, RedisStrictCommand<T> command) {
         internalLockLeaseTime = unit.toMillis(leaseTime);
 
-        return evalWriteAsync(getRawName(), LongCodec.INSTANCE, command,
+        return commandExecutor.syncedEval(getRawName(), LongCodec.INSTANCE, command,
                 "if (redis.call('exists', KEYS[1]) == 0) then " +
                         "redis.call('hincrby', KEYS[1], ARGV[2], 1); " +
                         "redis.call('pexpire', KEYS[1], ARGV[1]); " +
@@ -177,27 +182,15 @@ public class RedissonSpinLock extends RedissonBaseLock {
     }
 
     @Override
-    public void unlock() {
-        try {
-            get(unlockAsync(Thread.currentThread().getId()));
-        } catch (RedisException e) {
-            if (e.getCause() instanceof IllegalMonitorStateException) {
-                throw (IllegalMonitorStateException) e.getCause();
-            } else {
-                throw e;
-            }
-        }
-    }
-
-    @Override
-    public boolean forceUnlock() {
-        return get(forceUnlockAsync());
+    protected void cancelExpirationRenewal(Long threadId) {
+        super.cancelExpirationRenewal(threadId);
+        this.internalLockLeaseTime = getServiceManager().getCfg().getLockWatchdogTimeout();
     }
 
     @Override
     public RFuture<Boolean> forceUnlockAsync() {
         cancelExpirationRenewal(null);
-        return evalWriteAsync(getRawName(), LongCodec.INSTANCE, RedisCommands.EVAL_BOOLEAN,
+        return commandExecutor.syncedEvalWithRetry(getRawName(), LongCodec.INSTANCE, RedisCommands.EVAL_BOOLEAN,
                 "if (redis.call('del', KEYS[1]) == 1) then "
                         + "return 1 "
                         + "else "
@@ -222,22 +215,6 @@ public class RedissonSpinLock extends RedissonBaseLock {
                         "end; " +
                         "return nil;",
                 Collections.singletonList(getRawName()), internalLockLeaseTime, getLockName(threadId));
-    }
-
-    @Override
-    public RFuture<Void> lockAsync() {
-        return lockAsync(-1, null);
-    }
-
-    @Override
-    public RFuture<Void> lockAsync(long leaseTime, TimeUnit unit) {
-        long currentThreadId = Thread.currentThread().getId();
-        return lockAsync(leaseTime, unit, currentThreadId);
-    }
-
-    @Override
-    public RFuture<Void> lockAsync(long currentThreadId) {
-        return lockAsync(-1, null, currentThreadId);
     }
 
     @Override
@@ -267,15 +244,10 @@ public class RedissonSpinLock extends RedissonBaseLock {
             }
 
             long nextSleepPeriod = backOffPolicy.getNextSleepPeriod();
-            commandExecutor.getConnectionManager().newTimeout(
+            getServiceManager().newTimeout(
                     timeout -> lockAsync(leaseTime, unit, currentThreadId, result, backOffPolicy),
                     nextSleepPeriod, TimeUnit.MILLISECONDS);
         });
-    }
-
-    @Override
-    public RFuture<Boolean> tryLockAsync() {
-        return tryLockAsync(Thread.currentThread().getId());
     }
 
     @Override
@@ -283,17 +255,6 @@ public class RedissonSpinLock extends RedissonBaseLock {
         RFuture<Long> longRFuture = tryAcquireAsync(-1, null, threadId);
         CompletionStage<Boolean> f = longRFuture.thenApply(res -> res == null);
         return new CompletableFutureWrapper<>(f);
-    }
-
-    @Override
-    public RFuture<Boolean> tryLockAsync(long waitTime, TimeUnit unit) {
-        return tryLockAsync(waitTime, -1, unit);
-    }
-
-    @Override
-    public RFuture<Boolean> tryLockAsync(long waitTime, long leaseTime, TimeUnit unit) {
-        long currentThreadId = Thread.currentThread().getId();
-        return tryLockAsync(waitTime, leaseTime, unit, currentThreadId);
     }
 
     @Override
@@ -335,7 +296,7 @@ public class RedissonSpinLock extends RedissonBaseLock {
             }
 
             long nextSleepPeriod = backOffPolicy.getNextSleepPeriod();
-            commandExecutor.getConnectionManager().newTimeout(
+            getServiceManager().newTimeout(
                     timeout -> tryLock(leaseTime, unit, currentThreadId, result, time, backOffPolicy),
                     nextSleepPeriod, TimeUnit.MILLISECONDS);
         });

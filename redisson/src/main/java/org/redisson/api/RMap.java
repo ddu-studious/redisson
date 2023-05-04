@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2013-2021 Nikita Koksharov
+ * Copyright (c) 2013-2022 Nikita Koksharov
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -36,7 +36,7 @@ import org.redisson.api.mapreduce.RMapReduce;
  * @param <K> map key
  * @param <V> value
  */
-public interface RMap<K, V> extends ConcurrentMap<K, V>, RExpirable, RMapAsync<K, V> {
+public interface RMap<K, V> extends ConcurrentMap<K, V>, RExpirable, RMapAsync<K, V>, RDestroyable {
 
     /**
      * Loads all map entries to this Redis map using {@link org.redisson.api.map.MapLoader}.
@@ -303,7 +303,7 @@ public interface RMap<K, V> extends ConcurrentMap<K, V>, RExpirable, RMapAsync<K
      * <p>
      * The returned map is <b>NOT</b> backed by the original map.
      *
-     * @param keys - map keys
+     * @param keys map keys
      * @return Map slice
      */
     Map<K, V> getAll(Set<K> keys);
@@ -622,5 +622,18 @@ public interface RMap<K, V> extends ConcurrentMap<K, V>, RExpirable, RMapAsync<K
      * @return map entries collection
      */
     Set<java.util.Map.Entry<K, V>> entrySet(int count);
-    
+
+    /**
+     * Adds object event listener
+     *
+     * @see org.redisson.api.listener.MapPutListener
+     * @see org.redisson.api.listener.MapRemoveListener
+     * @see org.redisson.api.ExpiredObjectListener
+     * @see org.redisson.api.DeletedObjectListener
+     *
+     * @param listener object event listener
+     * @return listener id
+     */
+    int addListener(ObjectListener listener);
+
 }

@@ -5,7 +5,9 @@ import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.redisson.api.*;
 import org.redisson.api.map.MapLoader;
+import org.redisson.api.map.MapLoaderAsync;
 import org.redisson.api.map.MapWriter;
+ import org.redisson.api.map.MapWriterAsync;
 import org.redisson.client.codec.Codec;
 import org.redisson.client.codec.DoubleCodec;
 import org.redisson.client.codec.IntegerCodec;
@@ -18,6 +20,8 @@ import java.io.Serializable;
 import java.time.Duration;
 import java.util.*;
 import java.util.Map.Entry;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -128,9 +132,7 @@ public abstract class BaseMapTest extends BaseTest {
     }
     
     protected void destroy(RMap<?, ?> map) {
-        if (map instanceof RDestroyable) {
-            ((RDestroyable) map).destroy();
-        }
+        map.destroy();
     }
 
     @Test
@@ -876,7 +878,15 @@ public abstract class BaseMapTest extends BaseTest {
         assertThat(map.size()).isEqualTo(1);
         destroy(map);
     }
-    
+
+    @Test
+    public void testKeySetByPatternCodec() {
+        RMap<String, String> map = getMap("test", new CompositeCodec(StringCodec.INSTANCE, JsonJacksonCodec.INSTANCE));
+        map.put("1-1", "test1");
+        Set<String> set = map.keySet("1-*");
+        assertThat(set).containsOnly("1-1");
+    }
+
     @Test
     public void testKeySetByPattern() {
         RMap<String, String> map = getMap("simple", StringCodec.INSTANCE);
@@ -1059,7 +1069,7 @@ public abstract class BaseMapTest extends BaseTest {
         Assumptions.assumeTrue(!(map instanceof RMapCache));
         map.put("1", "1234");
         assertThat(map.valueSize("4")).isZero();
-        assertThat(map.valueSize("1")).isEqualTo(7);
+        assertThat(map.valueSize("1")).isEqualTo(5);
         destroy(map);
     }
     
@@ -1150,8 +1160,12 @@ public abstract class BaseMapTest extends BaseTest {
     protected abstract <K, V> RMap<K, V> getWriterTestMap(String name, Map<K, V> map);
     
     protected abstract <K, V> RMap<K, V> getWriteBehindTestMap(String name, Map<K, V> map);
+
+    protected abstract <K, V> RMap<K, V> getWriteBehindAsyncTestMap(String name, Map<K, V> map);
     
     protected abstract <K, V> RMap<K, V> getLoaderTestMap(String name, Map<K, V> map);
+
+    protected abstract <K, V> RMap<K, V> getLoaderAsyncTestMap(String name, Map<K, V> map);
 
     @Test
     public void testMapLoaderGetMulipleNulls() {
@@ -1201,7 +1215,57 @@ public abstract class BaseMapTest extends BaseTest {
         destroy(map);
     }
 
-    
+    @Test
+    public void testLoaderGetAsync() {
+        Map<String, String> cache = new HashMap<String, String>();
+        cache.put("1", "11");
+        cache.put("2", "22");
+        cache.put("3", "33");
+
+        RMap<String, String> map = getLoaderAsyncTestMap("test", cache);
+
+        assertThat(map.size()).isEqualTo(0);
+        assertThat(map.get("1")).isEqualTo("11");
+        assertThat(map.size()).isEqualTo(1);
+        assertThat(map.get("0")).isNull();
+        map.put("0", "00");
+        assertThat(map.get("0")).isEqualTo("00");
+        assertThat(map.size()).isEqualTo(2);
+
+        assertThat(map.containsKey("2")).isTrue();
+        assertThat(map.size()).isEqualTo(3);
+
+        Map<String, String> s = map.getAll(new HashSet<>(Arrays.asList("1", "2", "9", "3")));
+        Map<String, String> expectedMap = new HashMap<>();
+        expectedMap.put("1", "11");
+        expectedMap.put("2", "22");
+        expectedMap.put("3", "33");
+        assertThat(s).isEqualTo(expectedMap);
+        assertThat(map.size()).isEqualTo(4);
+        destroy(map);
+
+    }
+
+    @Test
+    public void testWriteBehindAsyncFastRemove() throws InterruptedException {
+        Map<String, String> store = new HashMap<>();
+        RMap<String, String> map = getWriteBehindAsyncTestMap("test", store);
+
+        map.put("1", "11");
+        map.put("2", "22");
+        map.put("3", "33");
+
+        Thread.sleep(1400);
+
+        map.fastRemove("1", "2", "4");
+
+        Map<String, String> expected = new HashMap<>();
+        expected.put("3", "33");
+        Thread.sleep(1400);
+        assertThat(store).isEqualTo(expected);
+        destroy(map);
+    }
+
     @Test
     public void testWriterFastRemove() {
         Map<String, String> store = new HashMap<>();
@@ -1419,7 +1483,46 @@ public abstract class BaseMapTest extends BaseTest {
         }
         destroy(map);
     }
-    
+
+    @Test
+    public void testLoadAllAsync() {
+        Map<String, String> cache = new HashMap<String, String>();
+        for (int i = 0; i < 100; i++) {
+            cache.put("" + i, "" + (i*10 + i));
+        }
+
+        RMap<String, String> map = getLoaderAsyncTestMap("test", cache);
+
+        assertThat(map.size()).isEqualTo(0);
+        map.loadAll(false, 2);
+        assertThat(map.size()).isEqualTo(100);
+
+        for (int i = 0; i < 100; i++) {
+            assertThat(map.containsKey("" + i)).isTrue();
+        }
+        destroy(map);
+    }
+
+    protected <K, V> MapWriterAsync<K, V> createMapWriterAsync(Map<K, V> map) {
+        return new MapWriterAsync<K, V>() {
+
+            @Override
+            public CompletionStage<Void> write(Map<K, V> values) {
+                map.putAll(values);
+                return CompletableFuture.completedFuture(null);
+            }
+
+            @Override
+            public CompletionStage<Void> delete(Collection<K> keys) {
+                for (K key : keys) {
+                    map.remove(key);
+                }
+                return CompletableFuture.completedFuture(null);
+            }
+
+        };
+    }
+
     protected <K, V> MapWriter<K, V> createMapWriter(Map<K, V> map) {
         return new MapWriter<K, V>() {
 
@@ -1439,7 +1542,34 @@ public abstract class BaseMapTest extends BaseTest {
             
         };
     }
-    
+
+    protected <K, V> MapLoaderAsync<K, V> createMapLoaderAsync(Map<K, V> map) {
+        MapLoaderAsync<K, V> loaderAsync = new MapLoaderAsync<K, V>() {
+            @Override
+            public CompletionStage<V> load(Object key) {
+                return CompletableFuture.completedFuture(map.get(key));
+            }
+
+            @Override
+            public AsyncIterator<K> loadAllKeys() {
+                Iterator<K> iter = map.keySet().iterator();
+                return new AsyncIterator<K>() {
+
+                    @Override
+                    public CompletionStage<Boolean> hasNext() {
+                        return CompletableFuture.completedFuture(iter.hasNext());
+                    }
+
+                    @Override
+                    public CompletionStage<K> next() {
+                        return CompletableFuture.completedFuture(iter.next());
+                    }
+                };
+            }
+        };
+        return loaderAsync;
+    }
+
     protected <K, V> MapLoader<K, V> createMapLoader(Map<K, V> map) {
         return new MapLoader<K, V>() {
             @Override

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2013-2021 Nikita Koksharov
+ * Copyright (c) 2013-2022 Nikita Koksharov
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -38,22 +38,24 @@ public interface RedissonClient {
     /**
      * Returns time-series instance by <code>name</code>
      *
-     * @param <V> type of value
+     * @param <V> value type
+     * @param <L> label type
      * @param name - name of instance
      * @return RTimeSeries object
      */
-    <V> RTimeSeries<V> getTimeSeries(String name);
+    <V, L> RTimeSeries<V, L> getTimeSeries(String name);
 
     /**
      * Returns time-series instance by <code>name</code>
      * using provided <code>codec</code> for values.
      *
-     * @param <V> type of value
+     * @param <V> value type
+     * @param <L> label type
      * @param name - name of instance
      * @param codec - codec for values
      * @return RTimeSeries object
      */
-    <V> RTimeSeries<V> getTimeSeries(String name, Codec codec);
+    <V, L> RTimeSeries<V, L> getTimeSeries(String name, Codec codec);
 
     /**
      * Returns stream instance by <code>name</code>
@@ -80,7 +82,21 @@ public interface RedissonClient {
      * @return RStream object
      */
     <K, V> RStream<K, V> getStream(String name, Codec codec);
-    
+
+    /**
+     * Returns API for RediSearch module
+     *
+     * @return RSearch object
+     */
+    RSearch getSearch();
+
+    /**
+     * Returns API for RediSearch module using defined codec for attribute values.
+     *
+     * @return RSearch object
+     */
+    RSearch getSearch(Codec codec);
+
     /**
      * Returns rate limiter instance by <code>name</code>
      * 
@@ -510,6 +526,8 @@ public interface RedissonClient {
      */
     RLock getSpinLock(String name, LockOptions.BackOff backOff);
 
+    RFencedLock getFencedLock(String name);
+
     /**
      * Returns MultiLock instance associated with specified <code>locks</code>
      * 
@@ -519,7 +537,7 @@ public interface RedissonClient {
     RLock getMultiLock(RLock... locks);
     
     /*
-     * Use getLock method instead. Returned instance uses Redis Slave synchronization
+     * Use getLock() or getFencedLock() method instead.
      */
     @Deprecated
     RLock getRedLock(RLock... locks);

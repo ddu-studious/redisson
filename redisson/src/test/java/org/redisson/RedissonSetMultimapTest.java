@@ -223,10 +223,10 @@ public class RedissonSetMultimapTest extends BaseTest {
     public void testSizeInMemory() {
         RSetMultimap<String, String> set = redisson.getSetMultimap("test");
         set.put("1", "2");
-        assertThat(set.sizeInMemory()).isEqualTo(229);
+        assertThat(set.sizeInMemory()).isEqualTo(228);
 
         set.put("1", "3");
-        assertThat(set.sizeInMemory()).isEqualTo(259);
+        assertThat(set.sizeInMemory()).isEqualTo(257);
     }
     
     @Test
@@ -429,7 +429,14 @@ public class RedissonSetMultimapTest extends BaseTest {
         assertThat(oldValues).containsOnly(new SimpleValue("1"));
 
         Set<SimpleValue> allValues = map.getAll(new SimpleKey("0"));
-        assertThat(allValues).containsOnlyElementsOf(values);
+        assertThat(allValues).containsExactlyElementsOf(values);
+
+        Set<SimpleValue> oldValues2 = map.replaceValues(new SimpleKey("0"), Collections.emptyList());
+        assertThat(oldValues2).containsExactlyElementsOf(values);
+
+        Set<SimpleValue> vals = map.getAll(new SimpleKey("0"));
+        assertThat(vals).isEmpty();
+
     }
 
     @Test

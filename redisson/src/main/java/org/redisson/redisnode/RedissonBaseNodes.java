@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2013-2021 Nikita Koksharov
+ * Copyright (c) 2013-2022 Nikita Koksharov
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -75,12 +75,12 @@ public class RedissonBaseNodes implements BaseRedisNodes {
         for (MasterSlaveEntry masterSlaveEntry : entries) {
             if (nodeType == NodeType.MASTER
                     && masterSlaveEntry.getAllEntries().isEmpty()
-                        && RedisURI.compare(masterSlaveEntry.getClient().getAddr(), addr)) {
+                        && addr.equals(masterSlaveEntry.getClient().getAddr())) {
                 return new RedisNode(masterSlaveEntry.getClient(), commandExecutor, NodeType.MASTER);
             }
 
             for (ClientConnectionsEntry entry : masterSlaveEntry.getAllEntries()) {
-                if (RedisURI.compare(entry.getClient().getAddr(), addr)
+                if (addr.equals(entry.getClient().getAddr())
                         && entry.getFreezeReason() != ClientConnectionsEntry.FreezeReason.MANAGER) {
                     return new RedisNode(entry.getClient(), commandExecutor, entry.getNodeType());
                 }

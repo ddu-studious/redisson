@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2013-2021 Nikita Koksharov
+ * Copyright (c) 2013-2022 Nikita Koksharov
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,18 +15,19 @@
  */
 package org.redisson.client;
 
-import java.net.InetSocketAddress;
-import java.net.URL;
-import java.util.concurrent.ExecutorService;
-
-import org.redisson.config.SslProvider;
-import org.redisson.misc.RedisURI;
-
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.resolver.AddressResolverGroup;
 import io.netty.util.Timer;
+import org.redisson.config.CredentialsResolver;
+import org.redisson.config.SslProvider;
+import org.redisson.misc.RedisURI;
+
+import java.net.InetSocketAddress;
+import java.net.URL;
+import java.util.concurrent.ExecutorService;
+import java.util.function.Consumer;
 
 /**
  * 
@@ -65,6 +66,9 @@ public class RedisClientConfig {
     private String sslKeystorePassword;
     private String[] sslProtocols;
     private NettyHook nettyHook = new DefaultNettyHook();
+    private CredentialsResolver credentialsResolver = new DefaultCredentialsResolver();
+    private Consumer<InetSocketAddress> connectedListener;
+    private Consumer<InetSocketAddress> disconnectedListener;
 
     public RedisClientConfig() {
     }
@@ -97,13 +101,17 @@ public class RedisClientConfig {
         this.sslKeystorePassword = config.sslKeystorePassword;
         this.resolverGroup = config.resolverGroup;
         this.sslHostname = config.sslHostname;
+        this.credentialsResolver = config.credentialsResolver;
+        this.connectedListener = config.connectedListener;
+        this.disconnectedListener = config.disconnectedListener;
     }
 
     public NettyHook getNettyHook() {
         return nettyHook;
     }
-    public void setNettyHook(NettyHook nettyHook) {
+    public RedisClientConfig setNettyHook(NettyHook nettyHook) {
         this.nettyHook = nettyHook;
+        return this;
     }
 
     public String getSslHostname() {
@@ -319,6 +327,31 @@ public class RedisClientConfig {
     }
     public RedisClientConfig setSslProtocols(String[] sslProtocols) {
         this.sslProtocols = sslProtocols;
+        return this;
+    }
+
+    public CredentialsResolver getCredentialsResolver() {
+        return credentialsResolver;
+    }
+
+    public RedisClientConfig setCredentialsResolver(CredentialsResolver credentialsResolver) {
+        this.credentialsResolver = credentialsResolver;
+        return this;
+    }
+
+    public Consumer<InetSocketAddress> getConnectedListener() {
+        return connectedListener;
+    }
+    public RedisClientConfig setConnectedListener(Consumer<InetSocketAddress> connectedListener) {
+        this.connectedListener = connectedListener;
+        return this;
+    }
+
+    public Consumer<InetSocketAddress> getDisconnectedListener() {
+        return disconnectedListener;
+    }
+    public RedisClientConfig setDisconnectedListener(Consumer<InetSocketAddress> disconnectedListener) {
+        this.disconnectedListener = disconnectedListener;
         return this;
     }
 }

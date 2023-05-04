@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2013-2021 Nikita Koksharov
+ * Copyright (c) 2013-2022 Nikita Koksharov
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,7 +19,7 @@ import io.netty.channel.EventLoopGroup;
 import org.redisson.client.DefaultNettyHook;
 import org.redisson.client.NettyHook;
 import org.redisson.client.codec.Codec;
-import org.redisson.codec.MarshallingCodec;
+import org.redisson.codec.Kryo5Codec;
 import org.redisson.connection.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -90,7 +90,7 @@ public class Config {
 
     private boolean useThreadClassLoader = true;
 
-    private AddressResolverGroupFactory addressResolverGroupFactory = new DnsAddressResolverGroupFactory();
+    private AddressResolverGroupFactory addressResolverGroupFactory = new SequentialDnsAddressResolverFactory();
 
     public Config() {
     }
@@ -101,7 +101,7 @@ public class Config {
 
         if (oldConf.getCodec() == null) {
             // use it by default
-            oldConf.setCodec(new MarshallingCodec());
+            oldConf.setCodec(new Kryo5Codec());
         }
 
         setConnectionListener(oldConf.getConnectionListener());
@@ -159,10 +159,10 @@ public class Config {
     }
 
     /**
-     * Redis data codec. Default is MarshallingCodec codec
+     * Redis data codec. Default is Kryo5Codec codec
      *
      * @see org.redisson.client.codec.Codec
-     * @see org.redisson.codec.MarshallingCodec
+     * @see org.redisson.codec.Kryo5Codec
      * 
      * @param codec object
      * @return config
@@ -263,6 +263,7 @@ public class Config {
      * 
      * @return ConnectionManager
      */
+    @Deprecated
     ConnectionManager getConnectionManager() {
         return connectionManager;
     }
@@ -274,6 +275,7 @@ public class Config {
      *      manager.
      * @param connectionManager for supply
      */
+    @Deprecated
     public void useCustomServers(ConnectionManager connectionManager) {
         this.connectionManager = connectionManager;
     }

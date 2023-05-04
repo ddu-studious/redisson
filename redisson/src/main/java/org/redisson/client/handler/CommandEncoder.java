@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2013-2021 Nikita Koksharov
+ * Copyright (c) 2013-2022 Nikita Koksharov
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -31,10 +31,7 @@
  */
 package org.redisson.client.handler;
 
-import io.netty.buffer.ByteBuf;
-import io.netty.buffer.ByteBufAllocator;
-import io.netty.buffer.ByteBufUtil;
-import io.netty.buffer.Unpooled;
+import io.netty.buffer.*;
 import io.netty.channel.ChannelHandler.Sharable;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPromise;
@@ -117,6 +114,9 @@ public class CommandEncoder extends MessageToByteEncoder<CommandData<?, ?>> {
     }
 
     private ByteBuf encode(Object in) {
+        if (in == null) {
+            return new EmptyByteBuf(ByteBufAllocator.DEFAULT);
+        }
         if (in instanceof byte[]) {
             return Unpooled.wrappedBuffer((byte[]) in);
         }

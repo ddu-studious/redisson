@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2013-2021 Nikita Koksharov
+ * Copyright (c) 2013-2022 Nikita Koksharov
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -134,7 +134,7 @@ public class BaseMasterSlaveServersConfig<T extends BaseMasterSlaveServersConfig
     /**
      * Redis Slave node failing to execute commands is excluded from the internal list of available nodes
      * when the time interval from the moment of first Redis command execution failure
-     * on this server reaches <code>slaveFailsInterval</code> value.
+     * on this server reaches <code>failedSlaveCheckInterval</code> value.
      * <p>
      * Default is <code>180000</code>
      *

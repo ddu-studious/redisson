@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2013-2021 Nikita Koksharov
+ * Copyright (c) 2013-2022 Nikita Koksharov
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -258,7 +258,7 @@ public interface RBatch {
      * @param name - name of object
      * @return ListMultimapCache object
      */
-    <K, V> RMultimapAsync<K, V> getListMultimapCache(String name);
+    <K, V> RMultimapCacheAsync<K, V> getListMultimapCache(String name);
     
     /**
      * Returns List based Multimap instance by name
@@ -273,7 +273,7 @@ public interface RBatch {
      * @param codec - codec for keys and values
      * @return ListMultimapCache object
      */
-    <K, V> RMultimapAsync<K, V> getListMultimapCache(String name, Codec codec);
+    <K, V> RMultimapCacheAsync<K, V> getListMultimapCache(String name, Codec codec);
     
     /**
      * Returns map instance by name.

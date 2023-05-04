@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2013-2021 Nikita Koksharov
+ * Copyright (c) 2013-2022 Nikita Koksharov
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,7 +16,6 @@
 package org.redisson.remote;
 
 import io.netty.buffer.ByteBuf;
-import io.netty.buffer.ByteBufUtil;
 import io.netty.buffer.Unpooled;
 import io.netty.util.CharsetUtil;
 import io.netty.util.Timeout;
@@ -40,7 +39,10 @@ import java.lang.annotation.Annotation;
 import java.lang.reflect.Method;
 import java.util.Arrays;
 import java.util.Map;
-import java.util.concurrent.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 /**
@@ -65,7 +67,7 @@ public abstract class BaseRemoteService {
 
     public BaseRemoteService(Codec codec, String name, CommandAsyncExecutor commandExecutor, String executorId, ConcurrentMap<String, ResponseEntry> responses) {
         this.codec = codec;
-        this.name = commandExecutor.getConnectionManager().getConfig().getNameMapper().map(name);
+        this.name = commandExecutor.getServiceManager().getConfig().getNameMapper().map(name);
         this.commandExecutor = commandExecutor;
         this.executorId = executorId;
         this.responses = responses;
@@ -143,7 +145,7 @@ public abstract class BaseRemoteService {
     }
     
     protected <T> void scheduleCheck(String mapName, String requestId, CompletableFuture<T> cancelRequest) {
-        commandExecutor.getConnectionManager().newTimeout(new TimerTask() {
+        commandExecutor.getServiceManager().newTimeout(new TimerTask() {
             @Override
             public void run(Timeout timeout) throws Exception {
                 if (cancelRequest.isDone()) {
@@ -172,9 +174,7 @@ public abstract class BaseRemoteService {
     }
 
     protected String generateRequestId(Object[] args) {
-        byte[] id = new byte[16];
-        ThreadLocalRandom.current().nextBytes(id);
-        return ByteBufUtil.hexDump(id);
+        return commandExecutor.getServiceManager().generateId();
     }
 
     protected abstract CompletableFuture<Boolean> addAsync(String requestQueueName, RemoteServiceRequest request,

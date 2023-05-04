@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2013-2021 Nikita Koksharov
+ * Copyright (c) 2013-2022 Nikita Koksharov
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -64,8 +64,7 @@ class QuarkusRedissonClientProcessor {
         nativeResources.produce(new NativeImageResourceBuildItem("META-INF/services/org.jboss.marshalling.ProviderDescriptor"));
         watchedFiles.produce(new HotDeploymentWatchedFileBuildItem("redisson.yaml"));
 
-        reflectiveItems.produce(new ReflectiveClassBuildItem(false, false, "org.redisson.codec.MarshallingCodec"));
-        reflectiveItems.produce(new ReflectiveClassBuildItem(false, false, "org.jboss.marshalling.river.RiverProviderDescriptor"));
+        reflectiveItems.produce(new ReflectiveClassBuildItem(false, false, "org.redisson.codec.Kryo5Codec"));
 
         reflectiveItems.produce(new ReflectiveClassBuildItem(true, false, "org.redisson.executor.RemoteExecutorService"));
         reflectiveItems.produce(new ReflectiveClassBuildItem(true, false, "org.redisson.executor.RemoteExecutorServiceAsync"));

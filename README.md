@@ -1,4 +1,4 @@
-# Redisson - Redis Java client<br/>with features of an in-memory data grid
+# Redisson - Easy Redis Java client<br/>with features of an in-memory data grid
 [![Maven Central](https://maven-badges.herokuapp.com/maven-central/org.redisson/redisson/badge.svg)](https://maven-badges.herokuapp.com/maven-central/org.redisson/redisson)
 [![JavaDoc](http://www.javadoc.io/badge/org.redisson/redisson.svg)](http://www.javadoc.io/doc/org.redisson/redisson)
 [![License](http://img.shields.io/:license-apache-brightgreen.svg)](http://www.apache.org/licenses/LICENSE-2.0.html)
@@ -6,22 +6,43 @@
 [Quick start](https://github.com/redisson/redisson#quick-start) | [Documentation](https://github.com/redisson/redisson/wiki/Table-of-Content) | [Changelog](https://github.com/redisson/redisson/blob/master/CHANGELOG.md) | [Code examples](https://github.com/redisson/redisson-examples) | [FAQs](https://github.com/redisson/redisson/wiki/16.-FAQ) | [Report an issue](https://github.com/redisson/redisson/issues/new)
 
 Based on high-performance async and lock-free Java Redis client and [Netty](http://netty.io) framework.  
-JDK compatibility:  1.8 - 18, Android  
+Supported JDK:   1.8 ... 20 and Android  
+Supported Redis: 3.0 ... 7.0  
 
 ## Features
 
-* Redis Replicated setup (also compatible with [AWS ElastiCache](http://docs.aws.amazon.com/AmazonElastiCache/latest/UserGuide/Replication.html) and [Azure Redis Cache](https://azure.microsoft.com/en-us/services/cache/))  
-* Redis Cluster setup (also compatible with [AWS ElastiCache Cluster](http://docs.aws.amazon.com/AmazonElastiCache/latest/UserGuide/Clusters.html), [Amazon MemoryDB](https://aws.amazon.com/memorydb) and [Azure Redis Cache](https://azure.microsoft.com/en-us/services/cache/))  
-* Redis Sentinel setup  
-* Redis with Master with Slave only  
-* Redis Single (also compatible with [Azure Redis Cache](https://azure.microsoft.com/en-us/services/cache/) and [Google Cloud Memorystore for Redis](https://cloud.google.com/memorystore/docs/redis/))  
 * Thread-safe implementation  
+* Supports [Redis Replicated](https://github.com/redisson/redisson/wiki/2.-Configuration/#25-replicated-mode), [Redis Cluster](https://github.com/redisson/redisson/wiki/2.-Configuration/#24-cluster-mode), [Redis Sentinel](https://github.com/redisson/redisson/wiki/2.-Configuration/#27-sentinel-mode), [Redis Master and Slaves](https://github.com/redisson/redisson/wiki/2.-Configuration/#28-master-slave-mode), [Redis Single](https://github.com/redisson/redisson/wiki/2.-Configuration/#26-single-instance-mode) setup
+* Amazon Web Services compatible
+     * [AWS Redis Global Datastore](https://docs.aws.amazon.com/AmazonElastiCache/latest/red-ug/Redis-Global-Datastore.html)
+     * [AWS ElastiCache](https://docs.aws.amazon.com/AmazonElastiCache/latest/red-ug/WhatIs.html)
+     * [Amazon MemoryDB](https://aws.amazon.com/memorydb)
+* Microsoft Azure compatible
+     * [Azure Redis Cache](https://azure.microsoft.com/en-us/services/cache/)
+     * [Azure Redis Cache active-passive replication](https://learn.microsoft.com/en-us/azure/azure-cache-for-redis/cache-how-to-geo-replication)
+     * [Azure Redis Cache active-active replication](https://learn.microsoft.com/en-us/azure/azure-cache-for-redis/cache-how-to-active-geo-replication)
+* Google Cloud Memorystore compatible
+     * [Google Cloud Redis](https://cloud.google.com/memorystore/docs/redis/)
+     * [Google Cloud Redis High availability](https://cloud.google.com/memorystore/docs/redis/high-availability)
+* Redis Enterprise compatible
+     * [Redis Enterprise](https://redis.com/redis-enterprise/)
+     * [Redis Enterprise Active-Active databases](https://docs.redis.com/latest/rs/databases/active-active/get-started/)
+     * [Redis Enterprise Multiple Active Proxy](https://docs.redis.com/latest/rs/databases/configure/proxy-policy/#about-multiple-active-proxy-support)
+* IBM Cloud compatible
+     * [IBM Cloud Databases for Redis](https://www.ibm.com/cloud/databases-for-redis)
+* Aiven compatible
+     * [Aiven for Redis](https://aiven.io/redis)
+* Supports auto-reconnection  
+* Supports failed to send command auto-retry  
+* Supports OSGi  
+* Supports SSL  
+* Asynchronous connection pool  
+* Lua scripting  
+* [RediSearch](https://github.com/redisson/redisson/wiki/9.-distributed-services/#96-redisearch-service)
 * [JSON datatype](https://github.com/redisson/redisson/wiki/6.-distributed-objects/#615-json-object-holder)
 * [Reactive Streams](https://github.com/redisson/redisson/wiki/3.-operations-execution#32-reactive-way) API  
 * [RxJava3](https://github.com/redisson/redisson/wiki/3.-operations-execution#32-reactive-way) API  
 * [Asynchronous](https://github.com/redisson/redisson/wiki/3.-operations-execution#31-async-way) API  
-* Asynchronous connection pool  
-* Lua scripting  
 * Local cache support including [Caffeine](https://github.com/ben-manes/caffeine)-based implementation
 * [Distributed Java objects](https://github.com/redisson/redisson/wiki/6.-Distributed-objects)  
     Object holder, Binary stream holder, Geospatial holder, BitSet, AtomicLong, AtomicDouble, PublishSubscribe,
@@ -46,13 +67,8 @@ JDK compatibility:  1.8 - 18, Android
 * [Tomcat Session Manager](https://github.com/redisson/redisson/tree/master/redisson-tomcat) implementation
 * [Spring Session](https://github.com/redisson/redisson/wiki/14.-Integration-with-frameworks/#147-spring-session) implementation
 * [Redis pipelining](https://github.com/redisson/redisson/wiki/10.-additional-features#103-execution-batches-of-commands) (command batches)
-* Supports Android platform  
-* Supports auto-reconnection  
-* Supports failed to send command auto-retry  
-* Supports OSGi  
-* Supports SSL  
 * Supports many popular codecs ([JBoss Marshalling](https://github.com/jboss-remoting/jboss-marshalling), [Jackson JSON](https://github.com/FasterXML/jackson), [Avro](http://avro.apache.org/), [Smile](http://wiki.fasterxml.com/SmileFormatSpec), [CBOR](http://cbor.io/), [MsgPack](http://msgpack.org/), [Kryo](https://github.com/EsotericSoftware/kryo), [Amazon Ion](https://amzn.github.io/ion-docs/), [LZ4](https://github.com/jpountz/lz4-java), [Snappy](https://github.com/xerial/snappy-java) and JDK Serialization)
-* With over 2000 unit tests  
+* Over 1800 unit tests  
 <!--
 Used by
 ================================
@@ -105,14 +121,14 @@ Used by
     <dependency>
        <groupId>org.redisson</groupId>
        <artifactId>redisson</artifactId>
-       <version>3.17.5</version>
+       <version>3.21.0</version>
     </dependency>  
 
 #### Gradle
-    compile 'org.redisson:redisson:3.17.5'  
+    compile 'org.redisson:redisson:3.21.0'  
 
 #### SBT
-    libraryDependencies += "org.redisson" % "redisson" % "3.17.5"
+    libraryDependencies += "org.redisson" % "redisson" % "3.21.0"
 
 #### Java
 
@@ -166,12 +182,12 @@ RExecutorService executor = redisson.getExecutorService("myExecutorService");
 
 ```
 
-Try __[Redisson PRO](https://redisson.pro)__ with **ultra-fast performance** and **support by SLA**.
+Upgrade to __[Redisson PRO](https://redisson.pro)__ with **advanced features**.
 
 ## Downloads
    
-[Redisson 3.17.5](https://repository.sonatype.org/service/local/artifact/maven/redirect?r=central-proxy&g=org.redisson&a=redisson&v=3.17.5&e=jar),
-[Redisson node 3.17.5](https://repository.sonatype.org/service/local/artifact/maven/redirect?r=central-proxy&g=org.redisson&a=redisson-all&v=3.17.5&e=jar)  
+[Redisson 3.21.0](https://repository.sonatype.org/service/local/artifact/maven/redirect?r=central-proxy&g=org.redisson&a=redisson&v=3.21.0&e=jar),
+[Redisson node 3.21.0](https://repository.sonatype.org/service/local/artifact/maven/redirect?r=central-proxy&g=org.redisson&a=redisson-all&v=3.21.0&e=jar)  
 
 ## FAQs
 

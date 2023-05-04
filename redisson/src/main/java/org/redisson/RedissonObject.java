@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2013-2021 Nikita Koksharov
+ * Copyright (c) 2013-2022 Nikita Koksharov
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,12 +16,14 @@
 package org.redisson;
 
 import io.netty.buffer.ByteBuf;
+import io.netty.util.ReferenceCountUtil;
 import org.redisson.api.*;
 import org.redisson.client.codec.ByteArrayCodec;
 import org.redisson.client.codec.Codec;
 import org.redisson.client.codec.StringCodec;
 import org.redisson.client.protocol.RedisCommands;
 import org.redisson.command.CommandAsyncExecutor;
+import org.redisson.connection.ServiceManager;
 import org.redisson.misc.CompletableFutureWrapper;
 import org.redisson.misc.Hash;
 
@@ -30,6 +32,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BiConsumer;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 
@@ -56,7 +59,7 @@ public abstract class RedissonObject implements RObject {
     }
 
     public RedissonObject(CommandAsyncExecutor commandExecutor, String name) {
-        this(commandExecutor.getConnectionManager().getCodec(), commandExecutor, name);
+        this(commandExecutor.getServiceManager().getCfg().getCodec(), commandExecutor, name);
     }
 
     public static String prefixName(String prefix, String name) {
@@ -65,7 +68,11 @@ public abstract class RedissonObject implements RObject {
         }
         return prefix + ":{" + name + "}";
     }
-    
+
+    public ServiceManager getServiceManager() {
+        return commandExecutor.getServiceManager();
+    }
+
     public static String suffixName(String name, String suffix) {
         if (name.contains("{")) {
             return name + ":" + suffix;
@@ -92,7 +99,7 @@ public abstract class RedissonObject implements RObject {
 
     @Override
     public String getName() {
-        return commandExecutor.getConnectionManager().getConfig().getNameMapper().unmap(name);
+        return commandExecutor.getServiceManager().getConfig().getNameMapper().unmap(name);
     }
 
     public final String getRawName() {
@@ -104,7 +111,7 @@ public abstract class RedissonObject implements RObject {
     }
 
     protected final void setName(String name) {
-        this.name = commandExecutor.getConnectionManager().getConfig().getNameMapper().map(name);
+        this.name = commandExecutor.getServiceManager().getConfig().getNameMapper().map(name);
     }
 
     @Override
@@ -243,25 +250,24 @@ public abstract class RedissonObject implements RObject {
         return codec;
     }
 
-    protected List<ByteBuf> encode(Object... values) {
-        List<ByteBuf> result = new ArrayList<>(values.length);
-        for (Object object : values) {
-            result.add(encode(object));
-        }
-        return result;
-    }
-
     protected List<ByteBuf> encode(Collection<?> values) {
         List<ByteBuf> result = new ArrayList<>(values.size());
         for (Object object : values) {
-            result.add(encode(object));
+            encode(result, object);
         }
         return result;
     }
     
     public void encode(Collection<Object> params, Collection<?> values) {
-        for (Object object : values) {
-            params.add(encode(object));
+        try {
+            for (Object object : values) {
+                params.add(encode(object));
+            }
+        } catch (Exception e) {
+            params.forEach(v -> {
+                ReferenceCountUtil.safeRelease(v);
+            });
+            throw e;
         }
     }
     
@@ -282,25 +288,62 @@ public abstract class RedissonObject implements RObject {
             keyState.release();
         }
     }
-    
+
     protected void encodeMapKeys(Collection<Object> params, Collection<?> values) {
-        for (Object object : values) {
-            params.add(encodeMapKey(object));
+        try {
+            for (Object object : values) {
+                params.add(encodeMapKey(object));
+            }
+        } catch (Exception e) {
+            params.forEach(v -> {
+                ReferenceCountUtil.safeRelease(v);
+            });
+            throw e;
         }
     }
 
     protected void encodeMapValues(Collection<Object> params, Collection<?> values) {
-        for (Object object : values) {
-            params.add(encodeMapValue(object));
+        try {
+            for (Object object : values) {
+                params.add(encodeMapValue(object));
+            }
+        } catch (Exception e) {
+            params.forEach(v -> {
+                ReferenceCountUtil.safeRelease(v);
+            });
+            throw e;
         }
     }
     
     public ByteBuf encode(Object value) {
         return commandExecutor.encode(codec, value);
     }
-    
+
+    public void encode(Collection<?> params, Object value) {
+        try {
+            Object v = commandExecutor.encode(codec, value);
+            ((Collection<Object>) params).add(v);
+        } catch (Exception e) {
+            params.forEach(v -> {
+                ReferenceCountUtil.safeRelease(v);
+            });
+            throw e;
+        }
+    }
+
     public ByteBuf encodeMapKey(Object value) {
         return commandExecutor.encodeMapKey(codec, value);
+    }
+
+    public ByteBuf encodeMapKey(Object value, Collection<Object> params) {
+        try {
+            return encodeMapKey(value);
+        } catch (Exception e) {
+            params.forEach(v -> {
+                ReferenceCountUtil.safeRelease(v);
+            });
+            throw e;
+        }
     }
 
     public ByteBuf encodeMapValue(Object value) {
@@ -434,6 +477,12 @@ public abstract class RedissonObject implements RObject {
         RFuture<Void> f2 = deletedTopic.removeListenerAsync(listenerId);
         CompletableFuture<Void> f = CompletableFuture.allOf(f1.toCompletableFuture(), f2.toCompletableFuture());
         return new CompletableFutureWrapper<>(f);
+    }
+
+    protected final List<String> map(String[] keys) {
+        return Arrays.stream(keys)
+                .map(k -> commandExecutor.getServiceManager().getConfig().getNameMapper().map(k))
+                .collect(Collectors.toList());
     }
 
 }

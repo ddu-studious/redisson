@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2013-2021 Nikita Koksharov
+ * Copyright (c) 2013-2022 Nikita Koksharov
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -410,5 +410,25 @@ public interface RMapAsync<K, V> extends RExpirableAsync {
      *         Previous value if key already exists in the hash and new value has been stored.
      */
     RFuture<V> putIfExistsAsync(K key, V value);
+
+    /**
+     * Clears map without removing options data used during map creation.
+     *
+     * @return <code>true</code> if map was cleared <code>false</code> if not
+     */
+    RFuture<Boolean> clearAsync();
+
+    /**
+     * Adds object event listener
+     *
+     * @see org.redisson.api.listener.MapPutListener
+     * @see org.redisson.api.listener.MapRemoveListener
+     * @see org.redisson.api.ExpiredObjectListener
+     * @see org.redisson.api.DeletedObjectListener
+     *
+     * @param listener - object event listener
+     * @return listener id
+     */
+    RFuture<Integer> addListenerAsync(ObjectListener listener);
 
 }

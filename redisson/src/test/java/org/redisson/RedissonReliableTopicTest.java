@@ -3,12 +3,14 @@ package org.redisson;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.Test;
 import org.redisson.api.RReliableTopic;
+import org.redisson.api.RedissonClient;
+import org.redisson.api.listener.MessageListener;
+import org.redisson.config.Config;
 
 import java.time.Duration;
 import java.util.LinkedList;
 import java.util.Queue;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -19,6 +21,76 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  */
 public class RedissonReliableTopicTest extends BaseTest {
+
+    @Test
+    public void testConcurrency() throws InterruptedException {
+        RReliableTopic rt = redisson.getReliableTopic("test1");
+
+        AtomicInteger sent = new AtomicInteger();
+        ExecutorService ee = Executors.newFixedThreadPool(8);
+        for (int i = 0; i < 500; i++) {
+            int j = i;
+            ee.submit(() -> {
+                rt.publish(j);
+                try {
+                    Thread.sleep(ThreadLocalRandom.current().nextInt(10));
+                } catch (InterruptedException e) {
+                    throw new RuntimeException(e);
+                }
+                sent.incrementAndGet();
+            });
+        }
+
+        AtomicInteger ii = new AtomicInteger();
+        rt.addListener(Integer.class, new MessageListener<Integer>() {
+            @Override
+            public void onMessage(CharSequence channel, Integer msg) {
+                ii.incrementAndGet();
+            }
+        });
+
+
+        ee.shutdown();
+        assertThat(ee.awaitTermination(10, TimeUnit.SECONDS)).isTrue();
+        assertThat(sent.get()).isEqualTo(500);
+        assertThat(ii.get()).isEqualTo(500);
+        rt.removeAllListeners();
+    }
+
+    @Test
+    public void testRemoveExpiredSubscribers() throws InterruptedException {
+        RReliableTopic rt = redisson.getReliableTopic("test1");
+        AtomicInteger counter = new AtomicInteger();
+        rt.addListener(Integer.class, (ch, m) -> {
+            counter.incrementAndGet();
+        });
+
+        Config config = new Config();
+        config.setReliableTopicWatchdogTimeout(1000);
+        config.useSingleServer()
+                .setAddress(RedisRunner.getDefaultRedisServerBindAddressAndPort());
+        RedissonClient secondInstance = Redisson.create(config);
+        RReliableTopic rt2 = secondInstance.getReliableTopic("test1");
+        rt2.addListener(Integer.class, (ch, m) -> {
+            counter.incrementAndGet();
+        });
+
+        assertThat(rt2.countSubscribers()).isEqualTo(2);
+
+        secondInstance.shutdown();
+
+        Thread.sleep(1500);
+
+        for (int i = 0; i < 10; i++) {
+            rt.publish(i);
+        }
+
+        Thread.sleep(100);
+
+        assertThat(rt.countSubscribers()).isEqualTo(1);
+        assertThat(counter.get()).isEqualTo(10);
+        assertThat(rt.size()).isEqualTo(0);
+    }
 
     @Test
     public void testAutoTrim() {
@@ -36,7 +108,7 @@ public class RedissonReliableTopicTest extends BaseTest {
             assertThat(rt.publish(i)).isEqualTo(2);
         }
 
-        Awaitility.waitAtMost(Duration.ofSeconds(1)).until(() -> counter.get() == 20);
+        Awaitility.waitAtMost(Duration.ofSeconds(2)).until(() -> counter.get() == 20);
         assertThat(rt.size()).isEqualTo(0);
     }
 

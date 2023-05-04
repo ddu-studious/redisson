@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2013-2021 Nikita Koksharov
+ * Copyright (c) 2013-2022 Nikita Koksharov
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -38,11 +38,10 @@ import org.redisson.remote.ResponseEntry;
 
 import java.io.ByteArrayInputStream;
 import java.io.ObjectInput;
-import java.time.LocalDateTime;
-import java.time.ZoneId;
-import java.time.ZonedDateTime;
 import java.util.Arrays;
+import java.util.Date;
 import java.util.Map;
+import java.util.TimeZone;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutionException;
@@ -138,12 +137,12 @@ public class TasksRunnerService implements RemoteExecutorService {
     @Override
     public void schedule(ScheduledCronExpressionParameters params) {
         CronExpression expression = new CronExpression(params.getCronExpression());
-        ZonedDateTime currentDate = ZonedDateTime.of(LocalDateTime.now(), ZoneId.of(params.getTimezone()));
-        ZonedDateTime nextStartDate = expression.nextTimeAfter(currentDate);
+        expression.setTimeZone(TimeZone.getTimeZone(params.getTimezone()));
+        Date nextStartDate = expression.getNextValidTimeAfter(new Date());
         RFuture<Void> future = null;
         if (nextStartDate != null) {
             RemoteExecutorServiceAsync service = asyncScheduledServiceAtFixed(params.getExecutorId(), params.getRequestId());
-            params.setStartTime(nextStartDate.toInstant().toEpochMilli());
+            params.setStartTime(nextStartDate.getTime());
             future = service.schedule(params);
         }
         try {
@@ -234,7 +233,7 @@ public class TasksRunnerService implements RemoteExecutorService {
             return;
         }
 
-        commandExecutor.getConnectionManager().newTimeout(timeout -> renewRetryTime(requestId),
+        commandExecutor.getServiceManager().newTimeout(timeout -> renewRetryTime(requestId),
                                                     Math.max(1000, retryInterval / 2), TimeUnit.MILLISECONDS);
     }
 
@@ -243,10 +242,10 @@ public class TasksRunnerService implements RemoteExecutorService {
                 // check if executor service not in shutdown state
                   "local name = ARGV[2];"
                 + "local scheduledName = ARGV[2];"
-                + "if string.sub(scheduledName, 1, 2) ~= 'ff' then "
-                    + "scheduledName = 'ff' .. scheduledName; "
+                + "if string.sub(scheduledName, 1, 3) ~= 'ff:' then "
+                    + "scheduledName = 'ff:' .. scheduledName; "
                 + "else "
-                    + "name = string.sub(name, 3, string.len(name)); "
+                    + "name = string.sub(name, 4, string.len(name)); "
                 + "end;"
                 + "local retryInterval = redis.call('get', KEYS[4]);"
                 
@@ -383,7 +382,7 @@ public class TasksRunnerService implements RemoteExecutorService {
                         + "redis.call('hdel', KEYS[4], ARGV[3]); "
                     + "end;";
         }
-        script += "redis.call('zrem', KEYS[5], 'ff' .. ARGV[3]);" +
+        script += "redis.call('zrem', KEYS[5], 'ff:' .. ARGV[3]);" +
                   "if redis.call('decr', KEYS[1]) == 0 then "
                    + "redis.call('del', KEYS[1]);"
                     + "if redis.call('get', KEYS[2]) == ARGV[1] then "

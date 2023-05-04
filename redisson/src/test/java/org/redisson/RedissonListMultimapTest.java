@@ -121,10 +121,10 @@ public class RedissonListMultimapTest extends BaseTest {
     public void testSizeInMemory() {
         RListMultimap<String, String> list = redisson.getListMultimap("test");
         list.put("1", "2");
-        assertThat(list.sizeInMemory()).isEqualTo(160);
+        assertThat(list.sizeInMemory()).isEqualTo(159);
 
         list.put("1", "3");
-        assertThat(list.sizeInMemory()).isEqualTo(166);
+        assertThat(list.sizeInMemory()).isEqualTo(164);
     }
 
     @Test
@@ -362,6 +362,12 @@ public class RedissonListMultimapTest extends BaseTest {
 
         List<SimpleValue> allValues = map.getAll(new SimpleKey("0"));
         assertThat(allValues).containsExactlyElementsOf(values);
+
+        List<SimpleValue> oldValues2 = map.replaceValues(new SimpleKey("0"), Collections.emptyList());
+        assertThat(oldValues2).containsExactlyElementsOf(values);
+
+        List<SimpleValue> vals = map.getAll(new SimpleKey("0"));
+        assertThat(vals).isEmpty();
     }
 
     @Test
