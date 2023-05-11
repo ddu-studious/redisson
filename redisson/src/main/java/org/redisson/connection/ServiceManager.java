@@ -103,7 +103,7 @@ public class ServiceManager {
 
     private final EventLoopGroup group;
 
-    private final Class<? extends SocketChannel> socketChannelClass;
+    private final Class<? extends SocketChannel> socketChannelClass; // Channel 使用
 
     private final AddressResolverGroup<InetSocketAddress> resolverGroup;
 
@@ -132,9 +132,9 @@ public class ServiceManager {
     public ServiceManager(Config cfg) {
         Version.logVersion();
 
-        if (cfg.getTransportMode() == TransportMode.EPOLL) {
-            if (cfg.getEventLoopGroup() == null) {
-                this.group = new EpollEventLoopGroup(cfg.getNettyThreads(), new DefaultThreadFactory("redisson-netty"));
+        if (cfg.getTransportMode() == TransportMode.EPOLL) { // Linux
+            if (cfg.getEventLoopGroup() == null) { // 可自定义
+                this.group = new EpollEventLoopGroup(cfg.getNettyThreads(), new DefaultThreadFactory("redisson-netty")); // 默认32core线程池
             } else {
                 this.group = cfg.getEventLoopGroup();
             }
@@ -145,7 +145,7 @@ public class ServiceManager {
             } else {
                 this.resolverGroup = cfg.getAddressResolverGroupFactory().create(EpollDatagramChannel.class, DnsServerAddressStreamProviders.platformDefault());
             }
-        } else if (cfg.getTransportMode() == TransportMode.KQUEUE) {
+        } else if (cfg.getTransportMode() == TransportMode.KQUEUE) { // Mac
             if (cfg.getEventLoopGroup() == null) {
                 this.group = new KQueueEventLoopGroup(cfg.getNettyThreads(), new DefaultThreadFactory("redisson-netty"));
             } else {
@@ -158,7 +158,7 @@ public class ServiceManager {
             } else {
                 this.resolverGroup = cfg.getAddressResolverGroupFactory().create(KQueueDatagramChannel.class, DnsServerAddressStreamProviders.platformDefault());
             }
-        } else {
+        } else { // 其他
             if (cfg.getEventLoopGroup() == null) {
                 this.group = new NioEventLoopGroup(cfg.getNettyThreads(), new DefaultThreadFactory("redisson-netty"));
             } else {
@@ -173,9 +173,9 @@ public class ServiceManager {
             }
         }
 
-        if (cfg.getExecutor() == null) {
+        if (cfg.getExecutor() == null) { // 线程池
             int threads = Runtime.getRuntime().availableProcessors() * 2;
-            if (cfg.getThreads() != 0) {
+            if (cfg.getThreads() != 0) { // threads 默认16
                 threads = cfg.getThreads();
             }
             executor = Executors.newFixedThreadPool(threads, new DefaultThreadFactory("redisson"));

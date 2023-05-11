@@ -184,22 +184,22 @@ public class ConfigSupport {
         ServiceManager serviceManager = new ServiceManager(configCopy);
 
         ConnectionManager cm = null;
-        if (configCopy.getMasterSlaveServersConfig() != null) {
+        if (configCopy.getMasterSlaveServersConfig() != null) { // 主从
             validate(configCopy.getMasterSlaveServersConfig());
             cm = new MasterSlaveConnectionManager(configCopy.getMasterSlaveServersConfig(), serviceManager);
-        } else if (configCopy.getSingleServerConfig() != null) {
+        } else if (configCopy.getSingleServerConfig() != null) { // 单机
             validate(configCopy.getSingleServerConfig());
             cm = new SingleConnectionManager(configCopy.getSingleServerConfig(), serviceManager);
-        } else if (configCopy.getSentinelServersConfig() != null) {
+        } else if (configCopy.getSentinelServersConfig() != null) { // Sentinel
             validate(configCopy.getSentinelServersConfig());
             cm = new SentinelConnectionManager(configCopy.getSentinelServersConfig(), serviceManager);
-        } else if (configCopy.getClusterServersConfig() != null) {
+        } else if (configCopy.getClusterServersConfig() != null) { // 集群
             validate(configCopy.getClusterServersConfig());
             cm = new ClusterConnectionManager(configCopy.getClusterServersConfig(), serviceManager);
-        } else if (configCopy.getReplicatedServersConfig() != null) {
+        } else if (configCopy.getReplicatedServersConfig() != null) { //
             validate(configCopy.getReplicatedServersConfig());
             cm = new ReplicatedConnectionManager(configCopy.getReplicatedServersConfig(), serviceManager);
-        } else if (configCopy.getConnectionManager() != null) {
+        } else if (configCopy.getConnectionManager() != null) { // 连接管理器
             cm = configCopy.getConnectionManager();
         }
 

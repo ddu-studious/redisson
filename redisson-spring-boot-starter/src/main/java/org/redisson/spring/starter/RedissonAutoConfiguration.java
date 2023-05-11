@@ -153,7 +153,7 @@ public class RedissonAutoConfiguration {
             username = (String) ReflectionUtils.invokeMethod(usernameMethod, redisProperties);
         }
 
-        if (redissonProperties.getConfig() != null) {
+        if (redissonProperties.getConfig() != null) { // 配置文件-String  yaml
             try {
                 config = Config.fromYAML(redissonProperties.getConfig());
             } catch (IOException e) {
@@ -164,7 +164,7 @@ public class RedissonAutoConfiguration {
                     throw new IllegalArgumentException("Can't parse config", e1);
                 }
             }
-        } else if (redissonProperties.getFile() != null) {
+        } else if (redissonProperties.getFile() != null) { // 文件 yaml
             try {
                 InputStream is = getConfigStream();
                 config = Config.fromYAML(is);
@@ -178,8 +178,8 @@ public class RedissonAutoConfiguration {
                     throw new IllegalArgumentException("Can't parse config", e1);
                 }
             }
-        } else if (redisProperties.getSentinel() != null) {
-            Method nodesMethod = ReflectionUtils.findMethod(Sentinel.class, "getNodes");
+        } else if (redisProperties.getSentinel() != null) { // sentinel 模式，非集群模式
+            Method nodesMethod = ReflectionUtils.findMethod(Sentinel.class, "getNodes"); // Sentinel节点集群
             Object nodesValue = ReflectionUtils.invokeMethod(nodesMethod, redisProperties.getSentinel());
 
             String[] nodes;
@@ -191,8 +191,8 @@ public class RedissonAutoConfiguration {
 
             config = new Config();
             SentinelServersConfig c = config.useSentinelServers()
-                    .setMasterName(redisProperties.getSentinel().getMaster())
-                    .addSentinelAddress(nodes)
+                    .setMasterName(redisProperties.getSentinel().getMaster()) // sentinel 主名称，redis-sentinel配置文件中定义
+                    .addSentinelAddress(nodes) // Sentinel 节点集群
                     .setDatabase(redisProperties.getDatabase())
                     .setUsername(username)
                     .setPassword(redisProperties.getPassword())
@@ -203,16 +203,16 @@ public class RedissonAutoConfiguration {
             if (connectTimeoutMethod != null && timeout != null) {
                 c.setTimeout(timeout);
             }
-        } else if (clusterMethod != null && ReflectionUtils.invokeMethod(clusterMethod, redisProperties) != null) {
+        } else if (clusterMethod != null && ReflectionUtils.invokeMethod(clusterMethod, redisProperties) != null) { // 集群
             Object clusterObject = ReflectionUtils.invokeMethod(clusterMethod, redisProperties);
-            Method nodesMethod = ReflectionUtils.findMethod(clusterObject.getClass(), "getNodes");
+            Method nodesMethod = ReflectionUtils.findMethod(clusterObject.getClass(), "getNodes"); // Redis节点集群
             List<String> nodesObject = (List) ReflectionUtils.invokeMethod(nodesMethod, clusterObject);
 
             String[] nodes = convert(nodesObject);
 
             config = new Config();
             ClusterServersConfig c = config.useClusterServers()
-                    .addNodeAddress(nodes)
+                    .addNodeAddress(nodes) // Redis 节点集群
                     .setUsername(username)
                     .setPassword(redisProperties.getPassword())
                     .setClientName(clientName);
@@ -227,11 +227,11 @@ public class RedissonAutoConfiguration {
             String prefix = REDIS_PROTOCOL_PREFIX;
             Method method = ReflectionUtils.findMethod(RedisProperties.class, "isSsl");
             if (method != null && (Boolean)ReflectionUtils.invokeMethod(method, redisProperties)) {
-                prefix = REDISS_PROTOCOL_PREFIX;
+                prefix = REDISS_PROTOCOL_PREFIX; // 安全认证
             }
 
             SingleServerConfig c = config.useSingleServer()
-                    .setAddress(prefix + redisProperties.getHost() + ":" + redisProperties.getPort())
+                    .setAddress(prefix + redisProperties.getHost() + ":" + redisProperties.getPort()) // Redis 单节点 Host：默认localhost   Port：默认6379
                     .setDatabase(redisProperties.getDatabase())
                     .setUsername(username)
                     .setPassword(redisProperties.getPassword())
@@ -244,11 +244,11 @@ public class RedissonAutoConfiguration {
             }
         }
         if (redissonAutoConfigurationCustomizers != null) {
-            for (RedissonAutoConfigurationCustomizer customizer : redissonAutoConfigurationCustomizers) {
+            for (RedissonAutoConfigurationCustomizer customizer : redissonAutoConfigurationCustomizers) { // 配置操作器
                 customizer.customize(config);
             }
         }
-        return Redisson.create(config);
+        return Redisson.create(config); // 创建Redisson
     }
 
     private String[] convert(List<String> nodesObject) {

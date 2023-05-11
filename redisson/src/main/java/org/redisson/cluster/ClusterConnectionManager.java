@@ -89,7 +89,7 @@ public class ClusterConnectionManager extends MasterSlaveConnectionManager {
         List<String> failedMasters = new ArrayList<>();
         for (String address : cfg.getNodeAddresses()) {
             RedisURI addr = new RedisURI(address);
-            CompletionStage<RedisConnection> connectionFuture = connectToNode(cfg, addr, addr.getHost());
+            CompletionStage<RedisConnection> connectionFuture = connectToNode(cfg, addr, addr.getHost()); // 连接到远程节点，创建Bootstrap( Netty 客户端 )
             try {
                 RedisConnection connection = connectionFuture.toCompletableFuture().join();
 

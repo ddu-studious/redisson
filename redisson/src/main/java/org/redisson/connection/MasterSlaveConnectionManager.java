@@ -105,7 +105,7 @@ public class MasterSlaveConnectionManager implements ConnectionManager {
     }
 
     protected final CompletionStage<RedisConnection> connectToNode(NodeType type, BaseConfig<?> cfg, RedisURI addr, String sslHostname) {
-        RedisConnection conn = nodeConnections.get(addr);
+        RedisConnection conn = nodeConnections.get(addr); // 第一次进来是Null
         if (conn != null) {
             if (!conn.isActive()) {
                 closeNodeConnection(conn);
@@ -114,7 +114,7 @@ public class MasterSlaveConnectionManager implements ConnectionManager {
             }
         }
 
-        RedisClient client = createClient(type, addr, cfg.getConnectTimeout(), cfg.getTimeout(), sslHostname);
+        RedisClient client = createClient(type, addr, cfg.getConnectTimeout(), cfg.getTimeout(), sslHostname); // 创建Redis客户端
         CompletionStage<RedisConnection> future = client.connectAsync();
         return future.thenCompose(connection -> {
             if (connection.isActive()) {
