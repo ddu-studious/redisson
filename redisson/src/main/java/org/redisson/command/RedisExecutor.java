@@ -763,7 +763,7 @@ public class RedisExecutor<V, R> {
 
     private MasterSlaveEntry getEntry(boolean read) {
         if (source.getRedirect() != null) {
-            return connectionManager.getEntry(source.getAddr());
+            return connectionManager.getEntry(source.getAddr()); // 连接管理，启动的时候ClusterConnectionManager.connect()时候初始化的
         }
 
         MasterSlaveEntry entry = source.getEntry();

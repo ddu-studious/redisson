@@ -131,7 +131,7 @@ public class ClusterConnectionManager extends MasterSlaveConnectionManager {
                         throw new IllegalStateException("Master node: " + partition.getNodeId() + " doesn't have address.");
                     }
 
-                    CompletableFuture<Void> masterFuture = addMasterEntry(partition, cfg);
+                    CompletableFuture<Void> masterFuture = addMasterEntry(partition, cfg); // 将Redis连接加入管理容器
                     masterFutures.add(masterFuture);
                 }
 
